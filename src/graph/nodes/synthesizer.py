@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections import OrderedDict
 
 from src.graph.state import AgentState
 
@@ -12,6 +13,7 @@ DISCLAIMER = (
     "as a substitute for licensed clinical judgment.\n\n"
 )
 SAFETY_RE = re.compile(r"\b(dosage|prescription|diagnosis|treat(?:ment|ing)?|medication)\b", re.IGNORECASE)
+INLINE_CITATION_RE = re.compile(r"\[(\d+)\]")
 
 
 def safety_filter(text: str) -> tuple[str, bool]:
@@ -46,12 +48,15 @@ def synthesizer(state: AgentState) -> AgentState:
             ref_lines.append(f"[{ref_num}] {label} (PubMed: {pid})")
         chunk_ref_nums.append(seen[pid])
 
-    citations = [str(n) for n in chunk_ref_nums]
+    citations = list(OrderedDict.fromkeys(str(n) for n in chunk_ref_nums))
 
     answer = state.get("draft_answer", "")
     # Strip a disclaimer the model may have echoed verbatim from the prompt.
     clean_answer = answer.replace(DISCLAIMER.strip(), "").strip()
     _, triggered = safety_filter(clean_answer)
+
+    if ref_lines and not INLINE_CITATION_RE.search(clean_answer):
+        clean_answer = clean_answer.rstrip() + " " + " ".join(f"[{citation}]" for citation in citations)
 
     if ref_lines:
         clean_answer = clean_answer.rstrip() + "\n\n---\n**References**\n" + "\n".join(ref_lines)

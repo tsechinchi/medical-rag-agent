@@ -3,12 +3,21 @@ from __future__ import annotations
 from langgraph.graph import END, StateGraph
 
 from config.config import FAITHFULNESS_THRESHOLD as THRESHOLD, MAX_RETRIES
+from src.model.prompts import classify_query_mode
+from src.graph.nodes.calculator import calculator
 from src.graph.nodes.critic import critic
 from src.graph.nodes.generator import generator
 from src.graph.nodes.planner import planner
 from src.graph.nodes.retriever import retriever
 from src.graph.nodes.synthesizer import synthesizer
 from src.graph.state import AgentState
+
+
+def _route_after_planner(state: AgentState) -> str:
+    query = state.get("query", "")
+    if classify_query_mode(query) == "calculation":
+        return "calculate"
+    return "retrieve"
 
 
 def _route_after_critic(state: AgentState) -> str:
@@ -26,6 +35,7 @@ def _increment_retry(state: AgentState) -> AgentState:
 def build_graph() -> StateGraph:
     graph = StateGraph(AgentState)
     graph.add_node("planner", planner)
+    graph.add_node("calculator", calculator)
     graph.add_node("retriever", retriever)
     graph.add_node("generator", generator)
     graph.add_node("critic", critic)
@@ -33,7 +43,15 @@ def build_graph() -> StateGraph:
     graph.add_node("synthesizer", synthesizer)
 
     graph.set_entry_point("planner")
-    graph.add_edge("planner", "retriever")
+    graph.add_conditional_edges(
+        "planner",
+        _route_after_planner,
+        {
+            "calculate": "calculator",
+            "retrieve": "retriever",
+        },
+    )
+    graph.add_edge("calculator", "synthesizer")
     graph.add_edge("retriever", "generator")
     graph.add_edge("generator", "critic")
     graph.add_conditional_edges(

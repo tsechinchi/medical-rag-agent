@@ -52,15 +52,24 @@ def main() -> None:
     if run and query:
         with st.spinner("Running retrieval and generation..."):
             result = _get_app().invoke({"query": query, "retry_count": 0})
+        retrieved_docs = result.get("retrieved_docs", [])
+        citations = result.get("citations", [])
 
         # Disclaimer is shown once here; synthesizer no longer prepends it to final_answer.
         if result.get("safety_filter_triggered"):
             st.warning(result.get("disclaimer", "Medical disclaimer: This output is informational only and must not be used as a substitute for licensed clinical judgment.").strip())
 
         st.markdown(result.get("final_answer", "No answer generated."))
+        if citations:
+            rendered = " ".join(f"[{citation}]" for citation in citations)
+            st.caption(f"Citations: {rendered}")
+        else:
+            st.caption("No grounded citations available for this answer.")
 
         with st.expander("Sources"):
-            for idx, node in enumerate(result.get("retrieved_docs", []), start=1):
+            if not retrieved_docs:
+                st.info("No sources were retrieved for this query.")
+            for idx, node in enumerate(retrieved_docs, start=1):
                 meta = node.metadata
                 st.markdown(f"**[{idx}] {meta.get('chunk_id', getattr(node, 'node_id', 'chunk'))}**")
                 st.write(node.get_content())
@@ -69,7 +78,7 @@ def main() -> None:
         st.sidebar.metric("Faithfulness", f"{result.get('faithfulness_score', 0.0):.3f}")
         st.sidebar.metric("Retries", int(result.get("retry_count", 0)))
 
-        for idx, node in enumerate(result.get("retrieved_docs", []), start=1):
+        for idx, node in enumerate(retrieved_docs, start=1):
             with st.sidebar.expander(f"Chunk {idx}"):
                 st.write(node.get_content())
                 st.write(

@@ -44,6 +44,7 @@ medical-rag-agent/
 │   │   ├── graph.py          # StateGraph assembly + conditional edges
 │   │   └── nodes/
 │   │       ├── planner.py    # query decomposition node
+│   │       ├── calculator.py # deterministic Cockcroft-Gault node
 │   │       ├── retriever.py  # hybrid retrieval node
 │   │       ├── generator.py  # BioMistral generation node
 │   │       ├── critic.py     # NLI faithfulness scoring node
@@ -77,9 +78,12 @@ class AgentState(TypedDict):
     retrieved_docs: list        # LlamaIndex NodeWithScore objects
     draft_answer: str
     faithfulness_score: float   # 0.0 to 1.0
+  critic_feedback: str
     retry_count: int
     final_answer: str
     citations: list[str]
+  safety_filter_triggered: bool
+  disclaimer: str
 ```
 Every node receives and returns AgentState. Nodes must never mutate state
 in place — always return `{**state, "field": new_value}`.
