@@ -3132,8 +3132,8 @@ requires-dist = [
     { name = "sentence-transformers", specifier = ">=5.2.3" },
     { name = "streamlit", specifier = ">=1.54.0" },
     { name = "torch", specifier = ">=2.10.0" },
-    { name = "transformers", specifier = ">=4.45,<5" },
-    { name = "trl", specifier = ">=0.23.1" },
+    { name = "transformers", specifier = ">=4.56.1,<4.57" },
+    { name = "trl", specifier = "==0.23.1" },
 ]
 provides-extras = ["cpu", "gpu"]
 
@@ -3303,7 +3303,7 @@ wheels = [
 
 [[package]]
 name = "transformers"
-version = "4.57.6"
+version = "4.56.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -3317,9 +3317,9 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c4/35/67252acc1b929dc88b6602e8c4a982e64f31e733b804c14bc24b47da35e6/transformers-4.57.6.tar.gz", hash = "sha256:55e44126ece9dc0a291521b7e5492b572e6ef2766338a610b9ab5afbb70689d3", size = 10134912, upload-time = "2026-01-16T10:38:39.284Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e5/82/0bcfddd134cdf53440becb5e738257cc3cf34cf229d63b57bfd288e6579f/transformers-4.56.2.tar.gz", hash = "sha256:5e7c623e2d7494105c726dd10f6f90c2c99a55ebe86eef7233765abd0cb1c529", size = 9844296, upload-time = "2025-09-19T15:16:26.778Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/03/b8/e484ef633af3887baeeb4b6ad12743363af7cce68ae51e938e00aaa0529d/transformers-4.57.6-py3-none-any.whl", hash = "sha256:4c9e9de11333ddfe5114bc872c9f370509198acf0b87a832a0ab9458e2bd0550", size = 11993498, upload-time = "2026-01-16T10:38:31.289Z" },
+    { url = "https://files.pythonhosted.org/packages/70/26/2591b48412bde75e33bfd292034103ffe41743cacd03120e3242516cd143/transformers-4.56.2-py3-none-any.whl", hash = "sha256:79c03d0e85b26cb573c109ff9eafa96f3c8d4febfd8a0774e8bba32702dd6dde", size = 11608055, upload-time = "2025-09-19T15:16:23.736Z" },
 ]
 
 [[package]]
@@ -3333,17 +3333,16 @@ wheels = [
 
 [[package]]
 name = "trl"
-version = "0.29.0"
+version = "0.23.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "accelerate" },
     { name = "datasets" },
-    { name = "packaging" },
     { name = "transformers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/69/5c/6f6d35b509e9107c9dbb6cbeee9db306c23bfcf75aaaa347b451c8bb2ecc/trl-0.29.0.tar.gz", hash = "sha256:b1c9f756a3d73c5457b7025b0c7bb9792873a87a2f3841cccf4f9d4f0e9ab273", size = 451314, upload-time = "2026-02-25T21:56:55.513Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4d/80/9f71d0c6c858de080be94d596bcfa4b703ad7bc6f2539311fa74eb2a7ff5/trl-0.23.1.tar.gz", hash = "sha256:9a3025a9e7ea18fa4f3a5e575aa16b914d4ea86334b34689216af54562a460c5", size = 516824, upload-time = "2025-10-02T05:15:24.34Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4b/7d/ffada7c1ac6628b2fa9962207543910813a6732820a556abc13907a77823/trl-0.29.0-py3-none-any.whl", hash = "sha256:7d49cb1526c55cc1d798d921d9d91bb84a35ad5c645d6277441ffb7a30a233aa", size = 528757, upload-time = "2026-02-25T21:56:54.022Z" },
+    { url = "https://files.pythonhosted.org/packages/e9/c7/c887226d7a1b3517c6db07f778fe61cb1254d7e2abfad6bb175bf48a8ba1/trl-0.23.1-py3-none-any.whl", hash = "sha256:ef43e2f00e6e30f3a8a9cc570e142278bfbd5aedc000ebe4eb0509d2f48415b2", size = 564602, upload-time = "2025-10-02T05:15:22.427Z" },
 ]
 
 [[package]]
