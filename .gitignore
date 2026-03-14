@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Studio/local machine artifacts
+.cursor-server
+.vscode-server
+.wget-hsts
+wger-hsts
+.wger-hsts
+.windsurf-server
+2b6c*.lock
+this_studio/
+studiorc
+.studiorc
+on_start.sh
+on_stop.sh
+machine_id_v4
+settings.json
+this_studio.iml
