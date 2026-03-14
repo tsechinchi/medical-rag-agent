@@ -6,6 +6,7 @@ from config.config import FAITHFULNESS_THRESHOLD as THRESHOLD, MAX_RETRIES
 from src.model.prompts import classify_query_mode
 from src.graph.nodes.calculator import calculator
 from src.graph.nodes.critic import critic
+from src.graph.nodes.drug_lookup import drug_lookup
 from src.graph.nodes.generator import generator
 from src.graph.nodes.planner import planner
 from src.graph.nodes.retriever import retriever
@@ -15,8 +16,11 @@ from src.graph.state import AgentState
 
 def _route_after_planner(state: AgentState) -> str:
     query = state.get("query", "")
-    if classify_query_mode(query) == "calculation":
+    mode = classify_query_mode(query)
+    if mode == "calculation":
         return "calculate"
+    if mode == "dosing":
+        return "drug_lookup"
     return "retrieve"
 
 
@@ -36,6 +40,7 @@ def build_graph() -> StateGraph:
     graph = StateGraph(AgentState)
     graph.add_node("planner", planner)
     graph.add_node("calculator", calculator)
+    graph.add_node("drug_lookup", drug_lookup)
     graph.add_node("retriever", retriever)
     graph.add_node("generator", generator)
     graph.add_node("critic", critic)
@@ -48,10 +53,12 @@ def build_graph() -> StateGraph:
         _route_after_planner,
         {
             "calculate": "calculator",
+            "drug_lookup": "drug_lookup",
             "retrieve": "retriever",
         },
     )
     graph.add_edge("calculator", "synthesizer")
+    graph.add_edge("drug_lookup", "retriever")
     graph.add_edge("retriever", "generator")
     graph.add_edge("generator", "critic")
     graph.add_conditional_edges(

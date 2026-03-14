@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import re
+
 from llama_index.core import Settings
 from llama_index.core.schema import NodeWithScore
 
 from src.graph.state import AgentState
-from src.model.prompts import build_generation_prompt
+from src.model.prompts import build_generation_prompt, classify_query_mode
+
+
+_DOSING_EVIDENCE_RE = re.compile(
+    r"\b(titrat(?:e|ion)|day\s*1|day\s*2|maintenance\s*dose|dosage\s+and\s+administration|package\s+insert|fda\s+label)\b",
+    re.IGNORECASE,
+)
 
 
 def _docs_to_context_blocks(
@@ -24,11 +32,32 @@ def _docs_to_context_blocks(
     return blocks
 
 
+def _has_dosing_evidence(docs: list[NodeWithScore]) -> bool:
+    for node in docs:
+        text = node.get_content() or ""
+        if _DOSING_EVIDENCE_RE.search(text):
+            return True
+        meta = node.metadata or {}
+        question = str(meta.get("question") or "")
+        if _DOSING_EVIDENCE_RE.search(question):
+            return True
+    return False
+
+
 def generator(state: AgentState) -> AgentState:
     """Build a grounded prompt from retrieved docs and generate a draft answer."""
     query: str = state["query"]
     docs: list[NodeWithScore] = state.get("retrieved_docs", [])
     critic_feedback = state.get("critic_feedback", "")
+    query_mode = classify_query_mode(query)
+
+    if query_mode == "dosing":
+        if not docs or not _has_dosing_evidence(docs):
+            return {
+                **state,
+                "draft_answer": "The available evidence does not directly address the exact dosing schedule.",
+                "critic_feedback": "",
+            }
 
     context_blocks = _docs_to_context_blocks(docs)
     prompt = build_generation_prompt(
