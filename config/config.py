@@ -7,7 +7,8 @@ USE_FINETUNED = True
 INFERENCE_MODEL_ID = MODEL_ID
 INFERENCE_REVISION = REVISION
 INFERENCE_CONTEXT_WINDOW = 512
-GENERATION_MAX_NEW_TOKENS = 96
+# None means "use the full remaining model context budget".
+GENERATION_MAX_NEW_TOKENS = None
 GENERATION_MIN_NEW_TOKENS = 16
 GENERATION_TEMPERATURE = 0.0
 MODEL_LOAD_TIMEOUT_SECONDS = 300
@@ -23,6 +24,11 @@ SEED = 42
 
 FAITHFULNESS_THRESHOLD = 0.6
 MAX_RETRIES = 2
+
+# Cross-encoder rerank score gate: chunks scoring below this value are dropped
+# before reaching the generator.  ms-marco-MiniLM-L-6-v2 emits raw logits;
+# 0.0 ≈ 50% relevance — anything below is considered off-topic.
+RERANK_MIN_SCORE = 0.0
 
 CHUNK_SIZE = 256
 CHUNK_OVERLAP = 32

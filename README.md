@@ -78,7 +78,7 @@ Inference defaults are tuned in `config/config.py` for a constrained T4-style GP
 
 - `INFERENCE_MODEL_ID` defaults to `BioMistral/BioMistral-7B` and is loaded in 4-bit NF4.
 - `RERANK_DEVICE` defaults to `cpu`; embedding device can be `auto` for faster retrieval where GPU headroom exists.
-- Generation defaults are budgeted for notebook and app responsiveness via `GENERATION_MAX_NEW_TOKENS` and `ANSWER_TIMEOUT_SECONDS`.
+- Generation length defaults to the full remaining model context budget, while `ANSWER_TIMEOUT_SECONDS` still bounds runtime.
 - Hugging Face stack is pinned to `transformers>=4.45,<5` and `huggingface-hub<1` for BioMistral compatibility.
 
 If you need a smaller temporary test model, override `INFERENCE_MODEL_ID` and `INFERENCE_REVISION` in `config/config.py` and rerun notebook setup cells.

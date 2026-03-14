@@ -54,4 +54,10 @@ def retriever(state: AgentState) -> AgentState:
         all_nodes.extend(reranked)
 
     merged = _deduplicate(all_nodes)
-    return {**state, "retrieved_docs": merged}
+
+    # Drop chunks whose rerank score is below the configured relevance gate.
+    # This prevents off-topic corpus hits from being passed to the generator.
+    min_score: float = getattr(app_config, "RERANK_MIN_SCORE", 0.0)
+    filtered = [n for n in merged if (n.score or 0.0) >= min_score]
+
+    return {**state, "retrieved_docs": filtered}

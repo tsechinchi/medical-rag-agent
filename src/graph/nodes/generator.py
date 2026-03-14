@@ -28,9 +28,14 @@ def generator(state: AgentState) -> AgentState:
     """Build a grounded prompt from retrieved docs and generate a draft answer."""
     query: str = state["query"]
     docs: list[NodeWithScore] = state.get("retrieved_docs", [])
+    critic_feedback = state.get("critic_feedback", "")
 
     context_blocks = _docs_to_context_blocks(docs)
-    prompt = build_generation_prompt(query=query, context_blocks=context_blocks)
+    prompt = build_generation_prompt(
+        query=query,
+        context_blocks=context_blocks,
+        critic_feedback=critic_feedback,
+    )
 
     llm = Settings.llm
     response = llm.complete(prompt)

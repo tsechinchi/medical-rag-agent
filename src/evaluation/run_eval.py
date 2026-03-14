@@ -53,7 +53,7 @@ def main() -> None:
     llm = QuantizedHFLLM(
         model=loaded.model,
         tokenizer=loaded.tokenizer,
-        max_new_tokens=getattr(app_config, "GENERATION_MAX_NEW_TOKENS", 96),
+        max_new_tokens=getattr(app_config, "GENERATION_MAX_NEW_TOKENS", None),
         min_new_tokens=getattr(app_config, "GENERATION_MIN_NEW_TOKENS", 16),
         temperature=getattr(app_config, "GENERATION_TEMPERATURE", 0.0),
         context_window=getattr(app_config, "INFERENCE_CONTEXT_WINDOW", 512),

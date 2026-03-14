@@ -9,6 +9,7 @@ class AgentState(TypedDict):
     retrieved_docs: list[Any]
     draft_answer: str
     faithfulness_score: float
+    critic_feedback: str
     retry_count: int
     final_answer: str
     citations: list[str]
