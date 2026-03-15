@@ -44,11 +44,18 @@ def _load_test_set(n_samples: int | None) -> list[dict] | None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_samples", type=int, default=None, metavar="N")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Override random seed for this run (defaults to config.SEED).",
+    )
     parser.add_argument("--skip-model-free", action="store_true")
     parser.add_argument("--skip-bertscore", action="store_true")
     args = parser.parse_args()
 
-    set_seed(app_config.SEED)
+    set_seed(app_config.SEED if args.seed is None else args.seed)
     loaded = load_model_and_tokenizer()
     llm = QuantizedHFLLM(
         model=loaded.model,

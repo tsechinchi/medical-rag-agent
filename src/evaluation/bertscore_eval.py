@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -11,7 +12,9 @@ from src.graph.graph import compile_graph
 
 TEST_SET_PATH = Path("data/eval/test_set.json")
 OUT_PATH = Path("experiments/bertscore_results.csv")
+MODEL_FREE_PATH = Path("experiments/model_free_eval_results.csv")
 MODEL_TYPE = "microsoft/deberta-xlarge-mnli"
+BERTSCORE_BATCH_SIZE = int(os.getenv("BERTSCORE_BATCH_SIZE", "8"))
 
 
 def _load_test_set(test_set: list[dict] | None = None) -> list[dict]:
@@ -20,27 +23,71 @@ def _load_test_set(test_set: list[dict] | None = None) -> list[dict]:
     return json.loads(TEST_SET_PATH.read_text(encoding="utf-8"))
 
 
+def _load_predictions_from_model_free(rows: list[dict]) -> tuple[list[str], list[str], list[str]] | None:
+    if not MODEL_FREE_PATH.exists():
+        return None
+
+    df = pd.read_csv(MODEL_FREE_PATH)
+    required_cols = {"question", "answer", "ground_truth"}
+    if not required_cols.issubset(df.columns):
+        return None
+
+    if rows is None:
+        selected = df
+    else:
+        indexed = df.drop_duplicates(subset=["question"]).set_index("question")
+        questions = [row["question"] for row in rows]
+        if any(question not in indexed.index for question in questions):
+            return None
+        selected = indexed.loc[questions].reset_index()
+
+    preds = selected["answer"].fillna("").astype(str).tolist()
+    refs = selected["ground_truth"].fillna("").astype(str).tolist()
+    questions = selected["question"].astype(str).tolist()
+    return preds, refs, questions
+
+
 def run_bertscore_evaluation(test_set: list[dict] | None = None) -> pd.DataFrame:
     rows = _load_test_set(test_set)
-    app = compile_graph()
-    preds = []
-    refs = []
-    questions = []
-    for row in rows:
-        result = app.invoke({"query": row["question"], "retry_count": 0})
-        preds.append(result.get("final_answer", result.get("draft_answer", "")))
-        refs.append(row["ground_truth"])
-        questions.append(row["question"])
+    cached = _load_predictions_from_model_free(rows)
+    if cached is not None:
+        preds, refs, questions = cached
+    else:
+        app = compile_graph()
+        preds = []
+        refs = []
+        questions = []
+        for row in rows:
+            result = app.invoke({"query": row["question"], "retry_count": 0})
+            preds.append(result.get("final_answer", result.get("draft_answer", "")))
+            refs.append(row["ground_truth"])
+            questions.append(row["question"])
 
-    _, _, f1 = bert_score(preds, refs, model_type=MODEL_TYPE, verbose=False, device="cpu")
+    _, _, f1 = bert_score(
+        preds,
+        refs,
+        model_type=MODEL_TYPE,
+        verbose=False,
+        device="cpu",
+        batch_size=BERTSCORE_BATCH_SIZE,
+    )
     df = pd.DataFrame(
         {
             "question": questions,
             "prediction": preds,
             "reference": refs,
-            "bertscore_f1": f1.tolist(),
+            "bertscore_f1": f1.tolist(),   # type: ignore
         }
     )
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(OUT_PATH, index=False)
     return df
+
+
+def main() -> None:
+    df = run_bertscore_evaluation()
+    print(f"BERTScore results saved to {OUT_PATH} ({len(df)} rows)")
+
+
+if __name__ == "__main__":
+    main()

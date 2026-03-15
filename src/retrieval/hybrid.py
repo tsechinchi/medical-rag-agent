@@ -25,7 +25,7 @@ def load_hybrid_retriever(
         llm=MockLLM(max_tokens=1),
         mode=fusion_mode,
         similarity_top_k=similarity_top_k,
-        num_queries=1,
+        num_queries=int(getattr(app_config, "RETRIEVAL_FUSION_NUM_QUERIES", 1)),
         use_async=False,
         verbose=False,
     )

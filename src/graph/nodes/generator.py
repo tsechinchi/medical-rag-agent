@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from config import config as app_config
 from llama_index.core import Settings
 from llama_index.core.schema import NodeWithScore
 
@@ -51,8 +52,24 @@ def generator(state: AgentState) -> AgentState:
     critic_feedback = state.get("critic_feedback", "")
     query_mode = classify_query_mode(query)
 
+    if not docs:
+        return {
+            **state,
+            "draft_answer": "The available evidence does not directly address this question.",
+            "critic_feedback": "",
+        }
+
+    top_score = float(docs[0].score or 0.0)
+    low_evidence_floor = float(getattr(app_config, "LOW_EVIDENCE_SCORE_FLOOR", 0.0))
+    if top_score < low_evidence_floor:
+        return {
+            **state,
+            "draft_answer": "The available evidence does not directly address this question.",
+            "critic_feedback": "",
+        }
+
     if query_mode == "dosing":
-        if not docs or not _has_dosing_evidence(docs):
+        if not _has_dosing_evidence(docs):
             return {
                 **state,
                 "draft_answer": "The available evidence does not directly address the exact dosing schedule.",

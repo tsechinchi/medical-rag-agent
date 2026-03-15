@@ -14,6 +14,7 @@ DISCLAIMER = (
 )
 SAFETY_RE = re.compile(r"\b(dosage|prescription|diagnosis|treat(?:ment|ing)?|medication)\b", re.IGNORECASE)
 INLINE_CITATION_RE = re.compile(r"\[(\d+)\]")
+INSUFFICIENT_EVIDENCE = "The available evidence does not directly address this question."
 
 
 def safety_filter(text: str) -> tuple[str, bool]:
@@ -28,6 +29,45 @@ def _ref_label(text: str) -> str:
     if len(text) <= _MAX_REF_CHARS:
         return text
     return text[:_MAX_REF_CHARS].rstrip() + "…"
+
+
+def _clean_answer_text(text: str) -> str:
+    """Remove common artifact sections and keep a compact final answer."""
+    cleaned = text.replace(DISCLAIMER.strip(), "").strip()
+
+    lines: list[str] = []
+    for raw in cleaned.splitlines():
+        line = raw.strip()
+        lower = line.lower()
+        if not line:
+            lines.append("")
+            continue
+        if lower.startswith("medical disclaimer:"):
+            continue
+        if lower.startswith("sources:"):
+            continue
+        if lower.startswith("**references**"):
+            continue
+        if line == "---":
+            continue
+        lines.append(line)
+
+    cleaned = "\n".join(lines)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned
+
+
+def _limit_sentences(text: str, max_sentences: int = 3) -> str:
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    kept: list[str] = []
+    for part in parts:
+        piece = part.strip()
+        if not piece:
+            continue
+        kept.append(piece)
+        if len(kept) >= max_sentences:
+            break
+    return " ".join(kept) if kept else text.strip()
 
 
 def synthesizer(state: AgentState) -> AgentState:
@@ -51,15 +91,13 @@ def synthesizer(state: AgentState) -> AgentState:
     citations = list(OrderedDict.fromkeys(str(n) for n in chunk_ref_nums))
 
     answer = state.get("draft_answer", "")
-    # Strip a disclaimer the model may have echoed verbatim from the prompt.
-    clean_answer = answer.replace(DISCLAIMER.strip(), "").strip()
+    clean_answer = _clean_answer_text(answer)
+    clean_answer = _limit_sentences(clean_answer, max_sentences=3)
     _, triggered = safety_filter(clean_answer)
 
-    if ref_lines and not INLINE_CITATION_RE.search(clean_answer):
+    add_inline_citations = clean_answer != INSUFFICIENT_EVIDENCE
+    if add_inline_citations and ref_lines and not INLINE_CITATION_RE.search(clean_answer):
         clean_answer = clean_answer.rstrip() + " " + " ".join(f"[{citation}]" for citation in citations)
-
-    if ref_lines:
-        clean_answer = clean_answer.rstrip() + "\n\n---\n**References**\n" + "\n".join(ref_lines)
 
     return {
         **state,

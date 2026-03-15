@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from langgraph.graph import END, StateGraph
 
-from config.config import FAITHFULNESS_THRESHOLD as THRESHOLD, MAX_RETRIES
+from config.config import (
+    FAITHFULNESS_THRESHOLD as THRESHOLD,
+    MAX_RETRIES,
+    RETRY_ON_UNSUPPORTED_CLAIMS,
+)
 from src.model.prompts import classify_query_mode
 from src.graph.nodes.calculator import calculator
 from src.graph.nodes.critic import critic
@@ -27,7 +31,12 @@ def _route_after_planner(state: AgentState) -> str:
 def _route_after_critic(state: AgentState) -> str:
     retries = state.get("retry_count", 0)
     faithfulness = state.get("faithfulness_score", 0.0)
-    if faithfulness < THRESHOLD and retries < MAX_RETRIES:
+    unsupported_claims = int(state.get("unsupported_claims_count", 0) or 0)
+    should_retry = faithfulness < THRESHOLD
+    if RETRY_ON_UNSUPPORTED_CLAIMS and unsupported_claims > 0:
+        should_retry = True
+
+    if should_retry and retries < MAX_RETRIES:
         return "retry"
     return "synthesize"
 

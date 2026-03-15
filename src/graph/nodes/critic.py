@@ -6,6 +6,7 @@ from functools import lru_cache
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+from config import config as app_config
 from src.graph.state import AgentState
 from src.model.prompts import classify_query_mode
 
@@ -13,6 +14,9 @@ from src.model.prompts import classify_query_mode
 NLI_MODEL = "cross-encoder/nli-deberta-v3-small"
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 _NUMBER_RE = re.compile(r"\b\d+(?:\.\d+)?\b")
+_INLINE_CITATION_RE = re.compile(r"\[(\d+)\]")
+_INSUFFICIENT_EVIDENCE_PREFIX = "the available evidence does not directly address this question"
+_INSUFFICIENT_DOSING_PREFIX = "the available evidence does not directly address the exact dosing schedule"
 
 
 @lru_cache(maxsize=1)
@@ -52,16 +56,26 @@ def _split_sentences(text: str) -> list[str]:
     return sentences
 
 
+def _normalize_sentence_for_nli(sentence: str) -> str:
+    cleaned = _INLINE_CITATION_RE.sub("", sentence)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
 def _sentence_support(sentences: list[str], docs) -> tuple[list[float], list[str]]:
     scores: list[float] = []
     feedback: list[str] = []
+    support_threshold = float(getattr(app_config, "CRITIC_SENTENCE_SUPPORT_THRESHOLD", 0.6))
     for sentence in sentences:
+        normalized = _normalize_sentence_for_nli(sentence)
+        if len(normalized) < 12:
+            continue
         best_score = 0.0
         for node in docs:
-            best_score = max(best_score, _entailment_score(node.get_content(), sentence))
+            best_score = max(best_score, _entailment_score(node.get_content(), normalized))
         scores.append(best_score)
-        if best_score < 0.6:
-            feedback.append(f"Unsupported or weakly supported claim: {sentence}")
+        if best_score < support_threshold:
+            feedback.append(f"Unsupported or weakly supported claim: {normalized}")
     return scores, feedback
 
 
@@ -91,6 +105,20 @@ def critic(state: AgentState) -> AgentState:
     query = state.get("query", "")
     draft = state.get("draft_answer", "")
     docs = state.get("retrieved_docs", [])
+
+    # If the generator intentionally abstained due to low/no evidence, do not
+    # force retries; this is a valid grounded response.
+    lowered_draft = draft.strip().lower()
+    if lowered_draft.startswith(_INSUFFICIENT_EVIDENCE_PREFIX) or lowered_draft.startswith(
+        _INSUFFICIENT_DOSING_PREFIX
+    ):
+        return {
+            **state,
+            "faithfulness_score": 1.0,
+            "critic_feedback": "",
+            "unsupported_claims_count": 0,
+        }
+
     if not draft or not docs:
         anchor_feedback = _numeric_anchor_feedback(query, draft)
         if classify_query_mode(query) == "calculation":
@@ -99,9 +127,15 @@ def critic(state: AgentState) -> AgentState:
                 **state,
                 "faithfulness_score": 1.0 if not anchor_feedback else 0.0,
                 "critic_feedback": feedback,
+                "unsupported_claims_count": len(anchor_feedback),
             }
         feedback = "\n".join(anchor_feedback) if anchor_feedback else "No grounded answer could be verified."
-        return {**state, "faithfulness_score": 0.0, "critic_feedback": feedback}
+        return {
+            **state,
+            "faithfulness_score": 0.0,
+            "critic_feedback": feedback,
+            "unsupported_claims_count": len(anchor_feedback),
+        }
 
     doc_scores = [_entailment_score(node.get_content(), draft) for node in docs]
     doc_mean = sum(doc_scores) / len(doc_scores)
@@ -123,4 +157,5 @@ def critic(state: AgentState) -> AgentState:
         **state,
         "faithfulness_score": faithfulness_score,
         "critic_feedback": critic_feedback,
+        "unsupported_claims_count": len(feedback_items),
     }

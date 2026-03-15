@@ -171,3 +171,4 @@ USE_FINETUNED = True
 - Do not create new top-level files — follow the existing directory structure
 - Do not use `pip install` — use `uv add`
 - Do not mutate AgentState in place inside nodes
+- Do not run multiple command on long running process, attach PID monitoring logs instead

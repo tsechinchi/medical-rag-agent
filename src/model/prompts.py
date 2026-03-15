@@ -13,7 +13,9 @@ SYSTEM_PROMPT = (
     "Cite sources inline using their numeric reference number, e.g. [1] or [2]. "
     "If the context does not contain enough information to answer the question, "
     "say exactly: 'The available evidence does not directly address this question.' "
-    "Do NOT copy or repeat raw context text verbatim."
+    "Do NOT copy or repeat raw context text verbatim. "
+    "Keep the response concise (1-3 sentences). "
+    "Do not include section headers, reference lists, or disclaimers in the final answer."
 )
 
 _MAX_CHUNK_CHARS = 1200
