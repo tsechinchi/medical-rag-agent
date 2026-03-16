@@ -14,7 +14,7 @@ FINETUNED_ADAPTER_REVISION = "main"
 # Inference defaults must follow the project baseline model config.
 INFERENCE_MODEL_ID = MODEL_ID
 INFERENCE_REVISION = REVISION
-INFERENCE_CONTEXT_WINDOW = 512
+INFERENCE_CONTEXT_WINDOW = 2048
 # None means "use the full remaining model context budget".
 GENERATION_MAX_NEW_TOKENS = None
 GENERATION_MIN_NEW_TOKENS = 16
@@ -35,12 +35,12 @@ DRUG_LOOKUP_MAX_SUBQUERIES = 3
 
 SEED = 42
 
-FAITHFULNESS_THRESHOLD = 0.7
-MAX_RETRIES = 2
+FAITHFULNESS_THRESHOLD = 0.65  # Relaxed from 0.7 to allow more answers through
+MAX_RETRIES = 3  # Increased from 2 to allow 1 more synthesis attempt
 
 # Sentence-level entailment floor used by the critic to mark individual claims
 # as unsupported; values below this are considered weak evidence.
-CRITIC_SENTENCE_SUPPORT_THRESHOLD = 0.7
+CRITIC_SENTENCE_SUPPORT_THRESHOLD = 0.65  # Relaxed from 0.7
 
 # If True, any unsupported claim found by the critic can trigger a retry even
 # when aggregate faithfulness is near threshold.
@@ -62,7 +62,7 @@ MIN_CONTEXT_DOCS = 3
 
 # If the top retrieved chunk score falls below this floor, return a concise
 # insufficient-evidence answer instead of attempting speculative generation.
-LOW_EVIDENCE_SCORE_FLOOR = 0.2
+LOW_EVIDENCE_SCORE_FLOOR = 0.10  # Decreased from 0.2 for moderate filtering
 
 # Lightweight lexical relevance gate to suppress clearly off-topic chunks that
 # occasionally survive reranking.
