@@ -25,3 +25,4 @@ on_stop.sh
 machine_id_v4
 settings.json
 this_studio.iml
+.claude

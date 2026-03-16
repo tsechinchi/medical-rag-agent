@@ -60,14 +60,24 @@ def generator(state: AgentState) -> AgentState:
         }
 
     top_score = float(docs[0].score or 0.0)
-    low_evidence_floor = float(getattr(app_config, "LOW_EVIDENCE_SCORE_FLOOR", 0.0))
-    if top_score < low_evidence_floor:
+
+    # Three-tier confidence logic with moderate thresholds
+    # 0.0-0.10: No meaningful evidence, abstain
+    # 0.10-0.25: Weak signal, partial answer with confidence marker
+    # 0.25+: Normal answer generation
+
+    partial_evidence_floor = 0.10
+    normal_evidence_floor = 0.25
+
+    if top_score < partial_evidence_floor:
+        # No meaningful evidence - abstain
         return {
             **state,
             "draft_answer": "The available evidence does not directly address this question.",
             "critic_feedback": "",
         }
 
+    # Check for dosing queries as a special case
     if query_mode == "dosing":
         if not _has_dosing_evidence(docs):
             return {
@@ -76,14 +86,28 @@ def generator(state: AgentState) -> AgentState:
                 "critic_feedback": "",
             }
 
+    is_partial = partial_evidence_floor <= top_score < normal_evidence_floor
     context_blocks = _docs_to_context_blocks(docs)
     prompt = build_generation_prompt(
         query=query,
         context_blocks=context_blocks,
         critic_feedback=critic_feedback,
+        is_partial=is_partial,
     )
 
     llm = Settings.llm
     response = llm.complete(prompt)
 
-    return {**state, "draft_answer": response.text}
+    # Add confidence marker for partial answers
+    draft_answer = response.text
+    if is_partial and not draft_answer.startswith("["):
+        draft_answer = "[Partially Supported] " + draft_answer
+
+    # Track confidence level in state
+    confidence_level = 0.9 if top_score >= normal_evidence_floor else 0.5 if is_partial else 0.0
+
+    return {
+        **state,
+        "draft_answer": draft_answer,
+        "confidence_level": confidence_level,
+    }

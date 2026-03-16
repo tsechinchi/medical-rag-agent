@@ -71,7 +71,7 @@ def main() -> None:
         max_new_tokens=getattr(app_config, "GENERATION_MAX_NEW_TOKENS", None),
         min_new_tokens=getattr(app_config, "GENERATION_MIN_NEW_TOKENS", 16),
         temperature=getattr(app_config, "GENERATION_TEMPERATURE", 0.0),
-        context_window=getattr(app_config, "INFERENCE_CONTEXT_WINDOW", 512),
+        context_window=getattr(app_config, "INFERENCE_CONTEXT_WINDOW", 2048),
         do_sample=False,
         repetition_penalty=1.05,
         top_p=1.0,

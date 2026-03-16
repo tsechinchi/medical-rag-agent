@@ -70,6 +70,19 @@ def _limit_sentences(text: str, max_sentences: int = 3) -> str:
     return " ".join(kept) if kept else text.strip()
 
 
+def _get_confidence_label(confidence_level: float) -> str:
+    """Map confidence score (0.0-1.0) to human-readable label."""
+    if confidence_level >= 0.9:
+        return "Strongly Supported by Evidence"
+    elif confidence_level >= 0.7:
+        return "Well-Supported by Evidence"
+    elif confidence_level >= 0.5:
+        return "Partially Supported; Context Limitations Noted"
+    elif confidence_level > 0.0:
+        return "Weakly Supported; Treat as Provisional"
+    return None
+
+
 def synthesizer(state: AgentState) -> AgentState:
     docs = state.get("retrieved_docs", [])
 
@@ -98,6 +111,12 @@ def synthesizer(state: AgentState) -> AgentState:
     add_inline_citations = clean_answer != INSUFFICIENT_EVIDENCE
     if add_inline_citations and ref_lines and not INLINE_CITATION_RE.search(clean_answer):
         clean_answer = clean_answer.rstrip() + " " + " ".join(f"[{citation}]" for citation in citations)
+
+    # Add confidence label if present
+    confidence_level = state.get("confidence_level", 0.0)
+    confidence_label = _get_confidence_label(confidence_level)
+    if confidence_label:
+        clean_answer = clean_answer.rstrip() + f"\n[Evidence Confidence: {confidence_label}]"
 
     return {
         **state,

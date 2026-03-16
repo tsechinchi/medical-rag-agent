@@ -1,0 +1,52 @@
+{
+  "firstStartTime": "2026-03-16T08:33:50.458Z",
+  "opusProMigrationComplete": true,
+  "sonnet1m45MigrationComplete": true,
+  "userID": "90d6fc6dbaf23f29b5bbc0dd97a18d175ed4f4d06a6f8ff86af174d9145dfbbb",
+  "toolUsage": {
+    "Read": {
+      "usageCount": 65,
+      "lastUsedAt": 1773650892889
+    },
+    "EnterPlanMode": {
+      "usageCount": 1,
+      "lastUsedAt": 1773650178316
+    },
+    "Glob": {
+      "usageCount": 5,
+      "lastUsedAt": 1773650196891
+    },
+    "Bash": {
+      "usageCount": 22,
+      "lastUsedAt": 1773650854476
+    },
+    "Grep": {
+      "usageCount": 2,
+      "lastUsedAt": 1773650205000
+    },
+    "Agent": {
+      "usageCount": 4,
+      "lastUsedAt": 1773650368425
+    },
+    "Write": {
+      "usageCount": 1,
+      "lastUsedAt": 1773650401611
+    },
+    "AskUserQuestion": {
+      "usageCount": 1,
+      "lastUsedAt": 1773650569350
+    },
+    "Edit": {
+      "usageCount": 13,
+      "lastUsedAt": 1773650913701
+    },
+    "ExitPlanMode": {
+      "usageCount": 1,
+      "lastUsedAt": 1773650615561
+    },
+    "TodoWrite": {
+      "usageCount": 2,
+      "lastUsedAt": 1773650766654
+    }
+  }
+}

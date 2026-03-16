@@ -1,5 +1,7 @@
 # Medical RAG Agent
 
+Safety-first medical question answering system using retrieval-augmented generation with confidence-based answer synthesis.
+
 ## Setup
 
 Prerequisite: `uv` installed.
@@ -27,6 +29,55 @@ uv run python -m src.evaluation.plot_results
 uv run streamlit run src/app.py
 ```
 
+## Safety-First Architecture
+
+The system prioritizes **evidence-based answers over speculation** through multiple validation layers:
+
+### 1. Evidence Gates
+- **Retrieval Score Floor** (0.10): Stops generation if top document score is too low
+- **Query Mode Detection**: Special handling for calculations, dosing schedules, and binary questions
+- **Dosing Evidence Check**: Requires explicit titration schedules in retrieved evidence
+
+### 2. NLI Faithfulness Validation
+- **Sentence-Level Support** (threshold: 0.65): Each sentence must be supported by retrieved context
+- **Entailment Checking**: Uses cross-encoder NLI model to validate claims
+- **Retry Loop** (max 3 attempts): On faithfulness failure, system retries with feedback
+
+### 3. Confidence Thresholds
+- **FAITHFULNESS_THRESHOLD**: 0.65 (aggregate answer must be ≥65% supported)
+- **CRITIC_SENTENCE_SUPPORT_THRESHOLD**: 0.65 (per-sentence requirement)
+- **Abstention Strategy**: "The available evidence does not directly address this question" when confidence is insufficient
+
+### 4. Confidence Labels
+Answers include transparent confidence markers:
+- ≥90%: "Strongly Supported by Evidence"
+- 70-90%: "Well-Supported by Evidence"
+- 50-70%: "Partially Supported; Context Limitations Noted"
+- <50%: "Weakly Supported; Treat as Provisional"
+
+## Evaluation Metrics (v2.0+)
+
+### Safety Metrics
+
+Per-query tracking for safety validation:
+- `abstention_detected`: System appropriately withheld answer (binary)
+- `unsupported_claims_count`: Hallucination risk indicator (integer)
+- `confidence_level`: Internal confidence score 0.0-1.0 (float)
+- `evidence_score`: Bge rerank score of top document (float)
+
+Summary metrics:
+- `abstention_precision`: Accuracy of abstention decisions (target ≥0.95)
+- `unsupported_claims_rate`: Average unsupported claims per query (target ≈0.0)
+
+### Traditional Metrics
+- **faithfulness_nli**: NLI-based entailment (0.0-1.0)
+- **bertscore_f1**: Semantic similarity to reference (0.0-1.0)
+- **answer_relevancy**: RAGAS relevance [masked for abstentions]
+- **context_precision/recall**: Retrieval quality metrics
+- **latency_per_query_s**: End-to-end response time
+
+**Key insight**: RAGAS metrics show NULL (not 0.0) for abstention rows, preventing unfair penalization of correct withholding decisions.
+
 ## QLoRA Fine-tuning + Evaluation
 
 Run these commands from the workspace root.
@@ -47,6 +98,38 @@ Quick test run (smaller, faster):
 ```bash
 uv run python -m src.evaluation.ablations --only D --n_samples 10
 ```
+
+## Configuration
+
+Inference defaults tuned in `config/config.py` for constrained T4-style GPU (16 GB VRAM):
+
+| Setting | Value | Purpose |
+|---------|-------|---------|
+| `FAITHFULNESS_THRESHOLD` | 0.65 | Critic validation threshold (0.7→0.65 v2.0) |
+| `CRITIC_SENTENCE_SUPPORT_THRESHOLD` | 0.65 | Per-sentence NLI floor (0.7→0.65 v2.0) |
+| `MAX_RETRIES` | 3 | Max synthesis retry attempts (2→3 v2.0) |
+| `LOW_EVIDENCE_SCORE_FLOOR` | 0.10 | Retrieval confidence gate (0.2→0.10 v2.0) |
+| `ANSWER_TIMEOUT_SECONDS` | 120 | Hard wall-clock timeout |
+| `INFERENCE_MODEL_ID` | BioMistral/BioMistral-7B | Medical domain LLM |
+| `LOAD_IN_4BIT` | True | 4-bit NF4 quantization |
+
+Override `INFERENCE_MODEL_ID` and `INFERENCE_REVISION` to test alternative models.
+
+## Troubleshooting
+
+### `ModuleNotFoundError: No module named 'langchain_huggingface'`
+
+When running with `--with-ragas-judge`, if you see this error even though `uv sync` completed:
+
+```bash
+# Solution: Install directly with pip
+pip install langchain-huggingface
+
+# Then sync uv to update lock file
+uv sync
+```
+
+This can happen when `uv sync` doesn't fully install all transitive dependencies. Using `pip install` directly ensures the package is available in your environment.
 
 ### Monitor a Long-running PID
 

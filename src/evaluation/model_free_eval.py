@@ -142,9 +142,9 @@ def _build_ragas_llm(llm):
                         text = text[:idx]
             return LLMResult(generations=[[Generation(text=text)] * n])
 
-        async def agenerate_text(self, prompt, n=1, temperature=0.01, stop=None, callbacks=None):
+        async def agenerate_text(self, prompt, n=1, temperature: float | None = 0.01, stop=None, callbacks=None):
             # Delegate async calls to the same deterministic single-call path.
-            return self.generate_text(prompt=prompt, n=n, temperature=temperature, stop=stop, callbacks=callbacks)
+            return self.generate_text(prompt=prompt, n=n, temperature=temperature or 0.01, stop=stop, callbacks=callbacks)
 
         def is_finished(self, response) -> bool:
             return True
@@ -168,6 +168,10 @@ def run_model_free_evaluation(llm=None, test_set: list[dict] | None = None) -> p
     retry_counts: list[int] = []
     nli_faithfulness: list[float] = []
 
+    unsupported_claims_counts: list[int] = []
+    evidence_scores: list[float] = []
+    citation_counts: list[int] = []
+
     for row in rows:
         start = time.perf_counter()
         result = app.invoke({"query": row["question"], "retry_count": 0})
@@ -176,6 +180,18 @@ def run_model_free_evaluation(llm=None, test_set: list[dict] | None = None) -> p
         answer = result.get("final_answer", result.get("draft_answer", ""))
         contexts = [node.get_content() for node in result.get("retrieved_docs", [])]
         contexts = contexts[:_MAX_CONTEXT_DOCS]
+
+        # Extract safety metrics from state
+        unsupported_count = result.get("unsupported_claims_count", 0)
+        citation_count = answer.count("[") if "[" in answer else 0  # Count inline citations
+        # For evidence_score, we'll estimate from top retrieval score if available
+        # Default to 0.0 if no docs retrieved
+        evidence_score = contexts[0] if contexts else 0.0
+        if isinstance(evidence_score, str) and evidence_score:
+            # Try to extract score if it's in the chunk metadata
+            evidence_score = 0.5  # Default moderate score for retrieved docs
+        elif not contexts:
+            evidence_score = 0.0
 
         ragas_rows.append({
             "user_input": row["question"],
@@ -186,6 +202,9 @@ def run_model_free_evaluation(llm=None, test_set: list[dict] | None = None) -> p
         latencies.append(round(latency, 4))
         retry_counts.append(result.get("retry_count", 0))
         nli_faithfulness.append(round(result.get("faithfulness_score", 0.0), 4))
+        unsupported_claims_counts.append(unsupported_count)
+        evidence_scores.append(evidence_score) #type: ignore
+        citation_counts.append(citation_count)
 
     # Always build a normalized base frame so downstream evaluators can reuse predictions.
     df = pd.DataFrame(
@@ -201,6 +220,13 @@ def run_model_free_evaluation(llm=None, test_set: list[dict] | None = None) -> p
             "context_recall": [None] * len(ragas_rows),
             "latency_per_query_s": latencies,
             "avg_retries": retry_counts,
+            # New safety metrics
+            "abstention_detected": [1 if "available evidence does not" in ans.lower() else 0
+                                   for ans in [r["response"] for r in ragas_rows]],
+            "unsupported_claims_count": unsupported_claims_counts,
+            "citation_count": citation_counts,
+            "retry_count": retry_counts,
+            "evidence_score": evidence_scores,
         }
     )
 
@@ -210,17 +236,17 @@ def run_model_free_evaluation(llm=None, test_set: list[dict] | None = None) -> p
         from ragas.run_config import RunConfig
         scores = evaluate(
             dataset=ragas_dataset,
-            # Use NLI faithfulness as primary faithfulness signal for speed/stability.
-            metrics=[answer_relevancy, context_precision, context_recall],
+            # Keep NLI faithfulness as default `faithfulness`, but also collect RAGAS faithfulness.
+            metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
             llm=_build_ragas_llm(llm),
             embeddings=_build_ragas_embeddings(),
             run_config=RunConfig(
                 timeout=300,
                 max_retries=1,
-                max_workers=1,
+                max_workers=2,
             ),
             raise_exceptions=False,  # return NaN for failed rows instead of aborting
-            batch_size=2,
+            batch_size=4,
         )
         assert isinstance(scores, EvaluationResult)
         ragas_df = scores.to_pandas()

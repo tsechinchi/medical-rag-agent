@@ -16,3 +16,4 @@ class AgentState(TypedDict):
     citations: list[str]
     safety_filter_triggered: bool
     disclaimer: str
+    confidence_level: float  # Confidence score (0.0-1.0) of the answer

@@ -16,6 +16,11 @@ SYSTEM_PROMPT = (
     "Do NOT copy or repeat raw context text verbatim. "
     "Keep the response concise (1-3 sentences). "
     "Do not include section headers, reference lists, or disclaimers in the final answer."
+    "\n\n"
+    "CRITICAL SAFETY ANCHOR: Every claim must be directly traceable to the provided context. "
+    "If uncertain about supporting evidence, state the limitation explicitly: "
+    "'The context suggests X, but does not clearly establish Y.' "
+    "Abstention is better than speculation in medical contexts."
 )
 
 _MAX_CHUNK_CHARS = 1200
@@ -27,6 +32,10 @@ _DOSING_QUERY_RE = re.compile(
     r"\b(titrat(?:e|ion)|dose|dosage|dosing|schedule|escalat(?:e|ion)|day\s*1|day\s*2|mg)\b",
     re.IGNORECASE,
 )
+_BINARY_QUERY_RE = re.compile(
+    r"^\s*(does|do|did|is|are|was|were|can|could|should|would|will|has|have|had)\b",
+    re.IGNORECASE,
+)
 
 
 def classify_query_mode(query: str) -> str:
@@ -34,13 +43,25 @@ def classify_query_mode(query: str) -> str:
         return "calculation"
     if _DOSING_QUERY_RE.search(query):
         return "dosing"
+    if _BINARY_QUERY_RE.search(query.strip()):
+        return "binary"
     return "default"
 
 
-def _mode_instructions(query: str, has_context: bool) -> str:
+def _mode_instructions(query: str, has_context: bool, is_partial: bool = False) -> str:
     mode = classify_query_mode(query)
+    base_instruction = ""
+    if is_partial:
+        base_instruction = (
+            "This answer is based on limited evidence (confidence level: PARTIALLY SUPPORTED). "
+            "Be clear about what the context supports and what it does not: "
+            "'The evidence suggests X, but the context does not establish Y.' "
+            "Explicitly state context limitations. "
+        )
+
     if mode == "calculation":
         return (
+            f"{base_instruction}"
             "For this question, the patient-specific values written in the Question are authoritative input data. "
             "Copy them exactly as written and do not replace them with typical or normal values. "
             "First restate the extracted variables exactly, then show the formula substitution, then give the computed result. "
@@ -50,21 +71,31 @@ def _mode_instructions(query: str, has_context: bool) -> str:
     if mode == "dosing":
         if has_context:
             return (
+                f"{base_instruction}"
                 "If the context contains a titration schedule, escalation sequence, or day-by-day dosing table, reproduce every step in order. "
                 "Do not compress a multi-step schedule into a simplified summary. "
                 "If the exact schedule is not present in the context, say the available evidence does not directly address the exact dosing schedule. "
             )
         return (
+            f"{base_instruction}"
             "This is a dosing-style question, but no supporting context is available. "
             "Do not invent a schedule or regimen. "
         )
-    return ""
+    if mode == "binary":
+        return (
+            f"{base_instruction}"
+            "This is a yes/no question. Start the answer with 'Yes,' or 'No,' when the context clearly supports one side. "
+            "If the evidence is mixed or insufficient, say exactly: 'The available evidence does not directly address this question.' "
+            "After the yes/no decision, give one concise evidence-backed sentence only. "
+        )
+    return base_instruction
 
 
 def build_generation_prompt(
     query: str,
     context_blocks: list[tuple[str, str]],
     critic_feedback: str = "",
+    is_partial: bool = False,
 ) -> str:
     """context_blocks is a list of (chunk_id, text); passages are numbered [1], [2], ..."""
     has_context = bool(context_blocks)
@@ -72,7 +103,7 @@ def build_generation_prompt(
         f"[{idx}] {text.strip()[:_MAX_CHUNK_CHARS]}"
         for idx, (_, text) in enumerate(context_blocks, start=1)
     )
-    mode_block = _mode_instructions(query, has_context)
+    mode_block = _mode_instructions(query, has_context, is_partial=is_partial)
     retry_block = ""
     if critic_feedback.strip():
         retry_block = (
