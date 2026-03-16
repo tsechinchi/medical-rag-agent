@@ -19,11 +19,22 @@ _INSUFFICIENT_EVIDENCE_PREFIX = "the available evidence does not directly addres
 _INSUFFICIENT_DOSING_PREFIX = "the available evidence does not directly address the exact dosing schedule"
 
 
+def _resolve_critic_device() -> str:
+    configured = str(getattr(app_config, "CRITIC_DEVICE", "auto")).lower()
+    if configured == "auto":
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    if configured in {"cuda", "cpu"}:
+        if configured == "cuda" and not torch.cuda.is_available():
+            return "cpu"
+        return configured
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
 @lru_cache(maxsize=1)
 def _load_nli_components():
     tokenizer = AutoTokenizer.from_pretrained(NLI_MODEL)
     model = AutoModelForSequenceClassification.from_pretrained(NLI_MODEL)
-    model.to("cpu")
+    model.to(_resolve_critic_device())
     model.eval()
     return tokenizer, model
 
@@ -37,6 +48,8 @@ def _entailment_score(premise: str, hypothesis: str) -> float:
         max_length=512,
         return_tensors="pt",
     )
+    model_device = next(model.parameters()).device
+    inputs = {k: v.to(model_device) for k, v in inputs.items()}
     with torch.inference_mode():
         logits = model(**inputs).logits
         probs = torch.softmax(logits, dim=-1)[0]

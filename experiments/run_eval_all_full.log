@@ -1,0 +1,8 @@
+nohup: ignoring input
+Running model-free evaluation...
+Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)
+Running BERTScore evaluation...
+Merging evaluation outputs...
+Merging ablations:   0%|          | 0/4 [00:00<?, ?file/s]Merging ablations: 100%|██████████| 4/4 [00:00<00:00, 610.59file/s]
+Unified results saved to experiments/all_results.csv  (5 variants)
+Evaluation pipeline complete.

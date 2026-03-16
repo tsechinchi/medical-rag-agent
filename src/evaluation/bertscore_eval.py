@@ -5,8 +5,10 @@ import os
 from pathlib import Path
 
 import pandas as pd
+import torch
 from bert_score import score as bert_score
 
+from config import config as app_config
 from src.graph.graph import compile_graph
 
 
@@ -15,6 +17,17 @@ OUT_PATH = Path("experiments/bertscore_results.csv")
 MODEL_FREE_PATH = Path("experiments/model_free_eval_results.csv")
 MODEL_TYPE = "microsoft/deberta-xlarge-mnli"
 BERTSCORE_BATCH_SIZE = int(os.getenv("BERTSCORE_BATCH_SIZE", "8"))
+
+
+def _resolve_bertscore_device() -> str:
+    configured = str(getattr(app_config, "BERTSCORE_DEVICE", "auto")).lower()
+    if configured == "auto":
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    if configured in {"cuda", "cpu"}:
+        if configured == "cuda" and not torch.cuda.is_available():
+            return "cpu"
+        return configured
+    return "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def _load_test_set(test_set: list[dict] | None = None) -> list[dict]:
@@ -68,7 +81,7 @@ def run_bertscore_evaluation(test_set: list[dict] | None = None) -> pd.DataFrame
         refs,
         model_type=MODEL_TYPE,
         verbose=False,
-        device="cpu",
+        device=_resolve_bertscore_device(),
         batch_size=BERTSCORE_BATCH_SIZE,
     )
     df = pd.DataFrame(

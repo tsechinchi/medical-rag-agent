@@ -8,6 +8,7 @@ import time
 from typing import cast
 
 import torch
+from huggingface_hub import snapshot_download
 from huggingface_hub.errors import RevisionNotFoundError
 from peft import PeftModel
 from transformers import (
@@ -93,6 +94,88 @@ def _load_model_with_revision_fallback(
         )
 
 
+def _is_adapter_dir(path: Path) -> bool:
+    return (path / "adapter_config.json").exists() and (
+        (path / "adapter_model.safetensors").exists()
+        or (path / "adapter_model.bin").exists()
+    )
+
+
+def _latest_local_checkpoint_adapter(base_adapter_path: Path) -> Path | None:
+    checkpoints_root = base_adapter_path.parent
+    if not checkpoints_root.exists():
+        return None
+
+    candidates: list[tuple[int, Path]] = []
+    for child in checkpoints_root.glob("checkpoint-*"):
+        if not child.is_dir():
+            continue
+        suffix = child.name.split("checkpoint-", 1)[-1]
+        if not suffix.isdigit():
+            continue
+        if _is_adapter_dir(child):
+            candidates.append((int(suffix), child))
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return candidates[0][1]
+
+
+def _download_adapter_snapshot(target_dir: Path) -> Path | None:
+    repo_id = str(getattr(app_config, "FINETUNED_ADAPTER_REPO_ID", "") or "").strip()
+    if not repo_id:
+        return None
+
+    revision = str(getattr(app_config, "FINETUNED_ADAPTER_REVISION", "main") or "main")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_download(
+        repo_id=repo_id,
+        revision=revision,
+        local_dir=str(target_dir),
+        local_dir_use_symlinks=False,
+        allow_patterns=[
+            "adapter_config.json",
+            "adapter_model.safetensors",
+            "adapter_model.bin",
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "special_tokens_map.json",
+            "chat_template.jinja",
+        ],
+    )
+    if _is_adapter_dir(target_dir):
+        return target_dir
+    return None
+
+
+def _resolve_adapter_path() -> Path:
+    adapter_path = Path(app_config.FINETUNED_ADAPTER_PATH)
+    if _is_adapter_dir(adapter_path):
+        return adapter_path
+
+    if bool(getattr(app_config, "AUTO_RESUME_LATEST_CHECKPOINT_ADAPTER", False)):
+        latest_checkpoint = _latest_local_checkpoint_adapter(adapter_path)
+        if latest_checkpoint is not None:
+            print(f"Using latest local checkpoint adapter: {latest_checkpoint}")
+            return latest_checkpoint
+
+    if bool(getattr(app_config, "AUTO_DOWNLOAD_FINETUNED_ADAPTER", False)):
+        try:
+            downloaded = _download_adapter_snapshot(adapter_path)
+            if downloaded is not None:
+                print(f"Downloaded finetuned adapter into: {downloaded}")
+                return downloaded
+        except Exception as exc:
+            print(f"Warning: adapter auto-download failed: {exc}")
+
+    raise FileNotFoundError(
+        f"Fine-tuned adapter not found at {adapter_path}. "
+        "Set FINETUNED_ADAPTER_REPO_ID for auto-download, "
+        "or disable USE_FINETUNED."
+    )
+
+
 def build_bnb_config() -> BitsAndBytesConfig:
     return BitsAndBytesConfig(
         load_in_4bit=True,
@@ -135,12 +218,7 @@ def _load_model_and_tokenizer_cached(
     model = _load_model_with_revision_fallback(model_id, revision, bnb_config)
 
     if finetuned:
-        adapter_path = Path(app_config.FINETUNED_ADAPTER_PATH)
-        if not adapter_path.exists():
-            raise FileNotFoundError(
-                f"Fine-tuned adapter not found at {adapter_path}. "
-                "Train the adapter first or set USE_FINETUNED=False."
-            )
+        adapter_path = _resolve_adapter_path()
         model = cast(
             PreTrainedModel,
             PeftModel.from_pretrained(model, str(adapter_path)),

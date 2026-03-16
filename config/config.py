@@ -3,6 +3,14 @@ REVISION = "6bf2f09471b6b8d0e50533a8e81ca60ec9c2a272"
 FINETUNED_ADAPTER_PATH = "data/qlora_checkpoints/final"
 USE_FINETUNED = True
 
+# Recovery options when USE_FINETUNED=True but FINETUNED_ADAPTER_PATH is missing.
+# 1) Reuse latest local checkpoint with adapter files.
+AUTO_RESUME_LATEST_CHECKPOINT_ADAPTER = True
+# 2) Optionally download adapter snapshot from Hugging Face Hub.
+AUTO_DOWNLOAD_FINETUNED_ADAPTER = True
+FINETUNED_ADAPTER_REPO_ID = ""
+FINETUNED_ADAPTER_REVISION = "main"
+
 # Inference defaults must follow the project baseline model config.
 INFERENCE_MODEL_ID = MODEL_ID
 INFERENCE_REVISION = REVISION
@@ -13,11 +21,14 @@ GENERATION_MIN_NEW_TOKENS = 16
 GENERATION_TEMPERATURE = 0.0
 MODEL_LOAD_TIMEOUT_SECONDS = 300
 ANSWER_TIMEOUT_SECONDS = 120
+# Device selection for eval components: "auto", "cuda", or "cpu".
+BERTSCORE_DEVICE = "auto"
+CRITIC_DEVICE = "auto"
 RETRIEVAL_SIMILARITY_TOP_K = 12
 BM25_SIMILARITY_TOP_K = 8
 RERANK_TOP_N = 5
 RETRIEVAL_FUSION_NUM_QUERIES = 3
-RERANK_DEVICE = "cpu"
+RERANK_DEVICE = "auto"
 EMBEDDING_DEVICE = "auto"
 PLANNER_MAX_SUBQUERIES = 1
 DRUG_LOOKUP_MAX_SUBQUERIES = 3

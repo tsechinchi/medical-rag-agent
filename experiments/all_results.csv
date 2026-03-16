@@ -1,5 +1,5 @@
 variant,n_questions,faithfulness,answer_relevancy,context_precision,context_recall,bertscore_f1_mean,avg_retries,latency_per_query_s
-full_pipeline,3,0.0167,0.0466,0.0494,0.0494,0.4848,,
+full_pipeline,200,0.9658,0.0409,0.0445,0.0445,0.4919,,
 ablation_no_loop,10,,,,,0.8229,,
 ablation_dense_only,10,,,,,0.8341,,
 ablation_no_rerank,10,,,,,0.8111,,
