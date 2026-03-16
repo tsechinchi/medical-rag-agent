@@ -33,6 +33,8 @@ def _summarize_variant(variant: str, df: pd.DataFrame) -> dict:
         "variant": variant,
         "n_questions": len(df),
         "faithfulness": _safe_mean(df, "faithfulness"),
+        "faithfulness_nli": _safe_mean(df, "faithfulness_nli"),
+        "faithfulness_ragas": _safe_mean(df, "faithfulness_ragas"),
         "answer_relevancy": _safe_mean(df, "answer_relevancy"),
         "context_precision": _safe_mean(df, "context_precision"),
         "context_recall": _safe_mean(df, "context_recall"),
@@ -71,12 +73,14 @@ def merge_results() -> pd.DataFrame:
             "variant": "full_pipeline",
             "n_questions": n_q if has_valid else (len(bdf) if len(bdf) else 0),
             "faithfulness": faith if has_valid else None,
+            "faithfulness_nli": _safe_mean(rdf, "faithfulness_nli") if has_valid else None,
+            "faithfulness_ragas": _safe_mean(rdf, "faithfulness_ragas") if has_valid else None,
             "answer_relevancy": ar if has_valid else None,
             "context_precision": cp if has_valid else None,
             "context_recall": cr if has_valid else None,
             "bertscore_f1_mean": _safe_mean(bdf, "bertscore_f1") if len(bdf) else None,
-            "avg_retries": None,
-            "latency_per_query_s": None,
+            "avg_retries": _safe_mean(rdf, "avg_retries") if has_valid else None,
+            "latency_per_query_s": _safe_mean(rdf, "latency_per_query_s") if has_valid else None,
         })
 
     # Ablations
