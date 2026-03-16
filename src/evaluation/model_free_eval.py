@@ -203,7 +203,7 @@ def run_model_free_evaluation(llm=None, test_set: list[dict] | None = None) -> p
         retry_counts.append(result.get("retry_count", 0))
         nli_faithfulness.append(round(result.get("faithfulness_score", 0.0), 4))
         unsupported_claims_counts.append(unsupported_count)
-        evidence_scores.append(evidence_score)
+        evidence_scores.append(evidence_score) #type: ignore
         citation_counts.append(citation_count)
 
     # Always build a normalized base frame so downstream evaluators can reuse predictions.
