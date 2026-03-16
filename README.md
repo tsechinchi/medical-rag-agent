@@ -115,6 +115,22 @@ Inference defaults tuned in `config/config.py` for constrained T4-style GPU (16 
 
 Override `INFERENCE_MODEL_ID` and `INFERENCE_REVISION` to test alternative models.
 
+## Troubleshooting
+
+### `ModuleNotFoundError: No module named 'langchain_huggingface'`
+
+When running with `--with-ragas-judge`, if you see this error even though `uv sync` completed:
+
+```bash
+# Solution: Install directly with pip
+pip install langchain-huggingface
+
+# Then sync uv to update lock file
+uv sync
+```
+
+This can happen when `uv sync` doesn't fully install all transitive dependencies. Using `pip install` directly ensures the package is available in your environment.
+
 ### Monitor a Long-running PID
 
 Use the helper script to log process status in the same format as `experiments/trainer_monitor.log`.
