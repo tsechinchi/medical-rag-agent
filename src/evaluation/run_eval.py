@@ -53,6 +53,14 @@ def main() -> None:
     )
     parser.add_argument("--skip-model-free", action="store_true")
     parser.add_argument("--skip-bertscore", action="store_true")
+    parser.add_argument(
+        "--with-ragas-judge",
+        action="store_true",
+        help=(
+            "Enable RAGAS LLM-judge metrics (answer_relevancy/context_*). "
+            "Disabled by default for speed and stability on large runs."
+        ),
+    )
     args = parser.parse_args()
 
     set_seed(app_config.SEED if args.seed is None else args.seed)
@@ -78,7 +86,11 @@ def main() -> None:
 
     if not args.skip_model_free:
         print("Running model-free evaluation...")
-        run_model_free_evaluation(llm=llm, test_set=test_set)
+        if args.with_ragas_judge:
+            print("RAGAS LLM-judge metrics enabled (--with-ragas-judge).")
+        else:
+            print("RAGAS LLM-judge metrics disabled (fast mode default).")
+        run_model_free_evaluation(llm=llm if args.with_ragas_judge else None, test_set=test_set)
 
     if not args.skip_bertscore:
         print("Running BERTScore evaluation...")
