@@ -12,6 +12,15 @@ from config import config as app_config
 from src.graph.graph import compile_graph
 
 
+import re as _re
+def _clean_answer(text):
+    text = _re.sub(r"\[\d+\]", "", text)
+    text = _re.sub(r"\[Evidence[^\]]*\]", "", text)
+    text = _re.sub(r"\[Partially[^\]]*\]", "", text)
+    text = _re.sub(r"Medical disclaimer:.*", "", text, flags=_re.IGNORECASE)
+    return text.strip()
+
+
 TEST_SET_PATH = Path("data/eval/test_set.json")
 OUT_PATH = Path("experiments/bertscore_results.csv")
 MODEL_FREE_PATH = Path("experiments/model_free_eval_results.csv")
