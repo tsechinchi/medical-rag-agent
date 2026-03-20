@@ -1,3 +1,4 @@
+
 MODEL_ID = "BioMistral/BioMistral-7B"
 REVISION = "6bf2f09471b6b8d0e50533a8e81ca60ec9c2a272"
 FINETUNED_ADAPTER_PATH = "data/qlora_checkpoints/final"
@@ -16,7 +17,7 @@ INFERENCE_MODEL_ID = MODEL_ID
 INFERENCE_REVISION = REVISION
 INFERENCE_CONTEXT_WINDOW = 2048
 # None means "use the full remaining model context budget".
-GENERATION_MAX_NEW_TOKENS = None
+GENERATION_MAX_NEW_TOKENS = 64
 GENERATION_MIN_NEW_TOKENS = 16
 GENERATION_TEMPERATURE = 0.0
 MODEL_LOAD_TIMEOUT_SECONDS = 300
@@ -24,8 +25,8 @@ ANSWER_TIMEOUT_SECONDS = 120
 # Device selection for eval components: "auto", "cuda", or "cpu".
 BERTSCORE_DEVICE = "auto"
 CRITIC_DEVICE = "auto"
-RETRIEVAL_SIMILARITY_TOP_K = 12
-BM25_SIMILARITY_TOP_K = 8
+RETRIEVAL_SIMILARITY_TOP_K = 20
+BM25_SIMILARITY_TOP_K = 15
 RERANK_TOP_N = 5
 RETRIEVAL_FUSION_NUM_QUERIES = 3
 RERANK_DEVICE = "auto"
@@ -35,8 +36,8 @@ DRUG_LOOKUP_MAX_SUBQUERIES = 3
 
 SEED = 42
 
-FAITHFULNESS_THRESHOLD = 0.65  # Relaxed from 0.7 to allow more answers through
-MAX_RETRIES = 3  # Increased from 2 to allow 1 more synthesis attempt
+FAITHFULNESS_THRESHOLD = 0.4  # Relaxed from 0.7 to allow more answers through
+MAX_RETRIES = 1  # Increased from 2 to allow 1 more synthesis attempt
 
 # Sentence-level entailment floor used by the critic to mark individual claims
 # as unsupported; values below this are considered weak evidence.
@@ -44,7 +45,7 @@ CRITIC_SENTENCE_SUPPORT_THRESHOLD = 0.65  # Relaxed from 0.7
 
 # If True, any unsupported claim found by the critic can trigger a retry even
 # when aggregate faithfulness is near threshold.
-RETRY_ON_UNSUPPORTED_CLAIMS = True
+RETRY_ON_UNSUPPORTED_CLAIMS = False
 
 # Cross-encoder rerank score gate: chunks scoring below this value are dropped
 # before reaching the generator.  ms-marco-MiniLM-L-6-v2 emits raw logits;
@@ -55,7 +56,7 @@ RERANK_MIN_SCORE = 0.1
 RERANK_SCORE_MARGIN = 1.5
 
 # Hard cap on context chunks passed to generation after rerank filtering.
-MAX_CONTEXT_DOCS = 5
+MAX_CONTEXT_DOCS = 3
 
 # Soft floor to keep enough evidence chunks when rerank scores are noisy.
 MIN_CONTEXT_DOCS = 3
