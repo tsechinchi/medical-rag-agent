@@ -40,23 +40,56 @@ def _resolve_device_map() -> dict[str, int] | str:
     return "cpu"
 
 
+def _use_local_files_only() -> bool:
+    return str(os.getenv("TRANSFORMERS_OFFLINE", "")).strip().lower() in {"1", "true", "yes"}
+
+
+def _model_cache_path() -> Path:
+    return Path(getattr(app_config, "MODEL_CACHE_DIR", "models/biomistral-7b"))
+
+
+def _model_source_path(model_id: str) -> str:
+    cache_path = _model_cache_path()
+    if cache_path.exists():
+        return str(cache_path)
+    return model_id
+
+
+def _download_model_snapshot(model_id: str, revision: str) -> Path:
+    cache_path = _model_cache_path()
+    cache_path.mkdir(parents=True, exist_ok=True)
+    snapshot_download(
+        repo_id=model_id,
+        revision=revision,
+        local_dir=str(cache_path),
+        local_dir_use_symlinks=False,
+    )
+    return cache_path
+
+
 def _load_tokenizer_with_revision_fallback(
     model_id: str,
     revision: str,
 ) -> PreTrainedTokenizerBase:
+    local_files_only = _use_local_files_only()
+    source = _model_source_path(model_id)
     try:
         return cast(
             PreTrainedTokenizerBase,
             AutoTokenizer.from_pretrained(
-                model_id,
+                source,
                 revision=revision,
+                local_files_only=local_files_only,
                 trust_remote_code=True,
             ),
         )
-    except (RevisionNotFoundError, ValueError):
+    except (RevisionNotFoundError, ValueError, OSError):
+        if local_files_only:
+            raise
+        _download_model_snapshot(model_id, revision)
         return cast(
             PreTrainedTokenizerBase,
-            AutoTokenizer.from_pretrained(model_id, trust_remote_code=True),
+            AutoTokenizer.from_pretrained(str(_model_cache_path()), local_files_only=True, trust_remote_code=True),
         )
 
 
@@ -65,6 +98,8 @@ def _load_model_with_revision_fallback(
     revision: str,
     bnb_config: BitsAndBytesConfig,
 ) -> PreTrainedModel:
+    local_files_only = _use_local_files_only()
+    source = _model_source_path(model_id)
     load_kwargs = {
         "quantization_config": bnb_config,
         "device_map": _resolve_device_map(),
@@ -75,19 +110,23 @@ def _load_model_with_revision_fallback(
         return cast(
             PreTrainedModel,
             AutoModelForCausalLM.from_pretrained(
-                model_id,
+                source,
                 revision=revision,
+                local_files_only=local_files_only,
                 **load_kwargs,
             ),
         )
-    except (RevisionNotFoundError, ValueError):
+    except (RevisionNotFoundError, ValueError, OSError):
+        if local_files_only:
+            raise
         # Revision may not exist on Hub; load from local cache to avoid the
         # "Unrecognized model" ValueError that newer transformers raises when
         # it can't fetch the config.json at the given revision.
+        _download_model_snapshot(model_id, revision)
         return cast(
             PreTrainedModel,
             AutoModelForCausalLM.from_pretrained(
-                model_id,
+                str(_model_cache_path()),
                 local_files_only=True,
                 **load_kwargs,
             ),
@@ -210,6 +249,11 @@ def _load_model_and_tokenizer_cached(
     if finetuned and model_id != app_config.MODEL_ID:
         model_id = app_config.MODEL_ID
         revision = app_config.REVISION
+
+    cache_path = _model_cache_path()
+    if not cache_path.exists() and not _use_local_files_only():
+        print(f"Downloading model snapshot into {cache_path} ...")
+        _download_model_snapshot(model_id, revision)
 
     tokenizer = _load_tokenizer_with_revision_fallback(model_id, revision)
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
