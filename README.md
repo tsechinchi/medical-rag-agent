@@ -17,7 +17,7 @@ uv sync --extra cpu
 uv sync --extra gpu
 ```
 
-If the selected model requires Hugging Face authentication, set your token as an environment variable:
+If the selected model requires Hugging Face authentication, set your token as an environment variable. If you are running fully offline, keep `TRANSFORMERS_OFFLINE=1` and make sure the model snapshot already exists in `models/biomistral-7b/`:
 
 ```bash
 # Linux/macOS
@@ -29,7 +29,7 @@ $env:HUGGINGFACE_HUB_TOKEN="<your_token>"
 $env:TRANSFORMERS_OFFLINE="0"
 ```
 
-For notebook-based setup, open [`notebooks/00_quick_start.ipynb`](./notebooks/00_quick_start.ipynb). It walks through cloning the repo, authenticating, syncing dependencies with `uv`, downloading the model once, and running a smoke test.
+For notebook-based setup, open [`notebooks/00_quick_start.ipynb`](./notebooks/00_quick_start.ipynb). It walks through cloning the repo, authenticating, syncing dependencies with `uv`, reusing a local model snapshot when available, downloading it once if online, and running a smoke test.
 
 ## Pipeline
 
