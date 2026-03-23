@@ -15,6 +15,7 @@ from ragas.metrics import (
 )
 
 from src.graph.graph import compile_graph
+from src.evaluation.run_metadata import annotate_with_run_metadata
 from src.utils.answer_cleaning import clean_for_scoring, is_abstention, is_corrupted_output
 
 
@@ -264,6 +265,8 @@ def run_model_free_evaluation(llm=None, test_set: list[dict] | None = None) -> p
             vals = ragas_df["faithfulness"].tolist()
             n = min(len(vals), len(df))
             df.loc[: n - 1, "faithfulness_ragas"] = vals[:n]
+
+    df = annotate_with_run_metadata(df, [r["user_input"] for r in ragas_rows])
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(OUT_PATH, index=False)

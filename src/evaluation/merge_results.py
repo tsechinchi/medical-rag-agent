@@ -18,6 +18,8 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
+from src.evaluation.run_metadata import resolve_run_id
+
 EXPERIMENTS = Path("experiments")
 OUT_PATH = EXPERIMENTS / "all_results.csv"
 
@@ -65,6 +67,24 @@ def _summarize_variant(variant: str, df: pd.DataFrame) -> dict:
     }
 
 
+def _load_if_exists(path: Path) -> pd.DataFrame:
+    return pd.read_csv(path) if path.exists() else pd.DataFrame()
+
+
+def _same_run(model_free_df: pd.DataFrame, bert_df: pd.DataFrame) -> bool:
+    if model_free_df.empty or bert_df.empty:
+        return False
+
+    model_run_id = resolve_run_id(model_free_df, "question")
+    bert_run_id = resolve_run_id(bert_df, "question")
+    if not model_run_id or not bert_run_id or model_run_id != bert_run_id:
+        return False
+
+    model_questions = model_free_df["question"].fillna("").astype(str).tolist() if "question" in model_free_df.columns else []
+    bert_questions = bert_df["question"].fillna("").astype(str).tolist() if "question" in bert_df.columns else []
+    return model_questions == bert_questions
+
+
 def merge_results() -> pd.DataFrame:
     rows: list[dict] = []
 
@@ -73,7 +93,7 @@ def merge_results() -> pd.DataFrame:
     legacy_ragas_path = EXPERIMENTS / "ragas_results.csv"
     bert_path = EXPERIMENTS / "bertscore_results.csv"
 
-    bdf = pd.read_csv(bert_path) if bert_path.exists() else pd.DataFrame()
+    bdf = _load_if_exists(bert_path)
 
     eval_path = model_free_path if model_free_path.exists() else legacy_ragas_path
 
@@ -88,8 +108,16 @@ def merge_results() -> pd.DataFrame:
     else:
         n_q, faith, ar, cp, cr, has_valid = 0, None, None, None, None, False
 
+    matched_bdf = bdf
+    if has_valid and not bdf.empty and not _same_run(rdf, bdf):
+        print(
+            "Warning: skipping BERTScore merge for full_pipeline because "
+            "experiments/bertscore_results.csv does not match the current model-free run."
+        )
+        matched_bdf = pd.DataFrame()
+
     # Always add a full_pipeline row if we have either RAGAS or BERTScore data
-    if has_valid or len(bdf) > 0:
+    if has_valid or len(matched_bdf) > 0:
         # Calculate abstention metrics for full pipeline
         abstention_precision = None
         unsupported_claims_rate = None
@@ -103,14 +131,14 @@ def merge_results() -> pd.DataFrame:
 
         rows.append({
             "variant": "full_pipeline",
-            "n_questions": n_q if has_valid else (len(bdf) if len(bdf) else 0),
+            "n_questions": n_q if has_valid else (len(matched_bdf) if len(matched_bdf) else 0),
             "faithfulness": faith if has_valid else None,
             "faithfulness_nli": _safe_mean(rdf, "faithfulness_nli") if has_valid else None,
             "faithfulness_ragas": _safe_mean(rdf, "faithfulness_ragas") if has_valid else None,
             "answer_relevancy": _safe_mean(rdf, "answer_relevancy") if has_valid else None,
             "context_precision": _safe_mean(rdf, "context_precision") if has_valid else None,
             "context_recall": _safe_mean(rdf, "context_recall") if has_valid else None,
-            "bertscore_f1_mean": _safe_mean(bdf, "bertscore_f1") if len(bdf) else None,
+            "bertscore_f1_mean": _safe_mean(matched_bdf, "bertscore_f1") if len(matched_bdf) else None,
             "avg_retries": _safe_mean(rdf, "avg_retries") if has_valid else None,
             "latency_per_query_s": _safe_mean(rdf, "latency_per_query_s") if has_valid else None,
             "abstention_precision": abstention_precision,

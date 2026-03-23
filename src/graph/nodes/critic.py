@@ -16,6 +16,8 @@ NLI_MODEL = "cross-encoder/nli-deberta-v3-small"
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 _NUMBER_RE = re.compile(r"\b\d+(?:\.\d+)?\b")
 _INLINE_CITATION_RE = re.compile(r"\[(\d+)\]")
+
+
 def _resolve_critic_device() -> str:
     configured = str(getattr(app_config, "CRITIC_DEVICE", "auto")).lower()
     if configured == "auto":
@@ -36,23 +38,41 @@ def _load_nli_components():
     return tokenizer, model
 
 
-def _entailment_score(premise: str, hypothesis: str) -> float:
+def _batched_entailment_scores(pairs: list[tuple[str, str]]) -> list[float]:
+    if not pairs:
+        return []
+
     tokenizer, model = _load_nli_components()
-    inputs = tokenizer(
-        premise,
-        hypothesis,
-        truncation=True,
-        max_length=512,
-        return_tensors="pt",
-    )
     model_device = next(model.parameters()).device
-    inputs = {k: v.to(model_device) for k, v in inputs.items()}
-    with torch.inference_mode():
-        logits = model(**inputs).logits
-        probs = torch.softmax(logits, dim=-1)[0]
-    if probs.shape[0] >= 3:
-        return float(probs[2].item())
-    return float(probs.max().item())
+    batch_size = max(1, int(getattr(app_config, "CRITIC_BATCH_SIZE", 12)))
+    scores: list[float] = []
+
+    for start in range(0, len(pairs), batch_size):
+        batch = pairs[start:start + batch_size]
+        premises = [premise for premise, _ in batch]
+        hypotheses = [hypothesis for _, hypothesis in batch]
+        inputs = tokenizer(
+            premises,
+            hypotheses,
+            truncation=True,
+            max_length=512,
+            padding=True,
+            return_tensors="pt",
+        )
+        inputs = {k: v.to(model_device) for k, v in inputs.items()}
+        with torch.inference_mode():
+            logits = model(**inputs).logits
+            probs = torch.softmax(logits, dim=-1)
+        if probs.shape[-1] >= 3:
+            scores.extend(probs[:, 2].tolist())
+        else:
+            scores.extend(probs.max(dim=-1).values.tolist())
+
+    return [float(score) for score in scores]
+
+
+def _entailment_score(premise: str, hypothesis: str) -> float:
+    return _batched_entailment_scores([(premise, hypothesis)])[0]
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -76,13 +96,23 @@ def _sentence_support(sentences: list[str], docs) -> tuple[list[float], list[str
     scores: list[float] = []
     feedback: list[str] = []
     support_threshold = float(getattr(app_config, "CRITIC_SENTENCE_SUPPORT_THRESHOLD", 0.6))
+    normalized_sentences: list[str] = []
+    pairs: list[tuple[str, str]] = []
+
     for sentence in sentences:
         normalized = _normalize_sentence_for_nli(sentence)
         if len(normalized) < 12:
             continue
-        best_score = 0.0
+        normalized_sentences.append(normalized)
         for node in docs:
-            best_score = max(best_score, _entailment_score(node.get_content(), normalized))
+            pairs.append((node.get_content(), normalized))
+
+    pair_scores = _batched_entailment_scores(pairs)
+    doc_count = max(len(docs), 1)
+    for idx, normalized in enumerate(normalized_sentences):
+        start = idx * doc_count
+        end = start + doc_count
+        best_score = max(pair_scores[start:end], default=0.0)
         scores.append(best_score)
         if best_score < support_threshold:
             feedback.append(f"Unsupported or weakly supported claim: {normalized}")
@@ -147,7 +177,7 @@ def critic(state: AgentState) -> AgentState:
             "unsupported_claims_count": len(anchor_feedback),
         }
 
-    doc_scores = [_entailment_score(node.get_content(), draft) for node in docs]
+    doc_scores = _batched_entailment_scores([(node.get_content(), draft) for node in docs])
     doc_mean = sum(doc_scores) / len(doc_scores)
 
     sentences = _split_sentences(draft)

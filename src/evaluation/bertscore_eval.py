@@ -9,6 +9,7 @@ import torch
 from bert_score import score as bert_score
 
 from config import config as app_config
+from src.evaluation.run_metadata import annotate_with_run_metadata
 from src.graph.graph import compile_graph
 from src.utils.answer_cleaning import clean_for_scoring
 
@@ -16,7 +17,7 @@ from src.utils.answer_cleaning import clean_for_scoring
 TEST_SET_PATH = Path("data/eval/test_set.json")
 OUT_PATH = Path("experiments/bertscore_results.csv")
 MODEL_FREE_PATH = Path("experiments/model_free_eval_results.csv")
-MODEL_TYPE = "microsoft/deberta-xlarge-mnli"
+MODEL_TYPE = str(getattr(app_config, "BERTSCORE_MODEL_TYPE", "microsoft/deberta-v3-base"))
 BERTSCORE_BATCH_SIZE = int(os.getenv("BERTSCORE_BATCH_SIZE", "8"))
 
 
@@ -93,6 +94,8 @@ def run_bertscore_evaluation(test_set: list[dict] | None = None) -> pd.DataFrame
             "bertscore_f1": f1.tolist(),   # type: ignore
         }
     )
+    df = annotate_with_run_metadata(df, questions)
+
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(OUT_PATH, index=False)
     return df

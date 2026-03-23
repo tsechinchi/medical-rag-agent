@@ -1,3 +1,5 @@
+import os
+
 
 MODEL_ID = "BioMistral/BioMistral-7B"
 REVISION = "6bf2f09471b6b8d0e50533a8e81ca60ec9c2a272"
@@ -12,57 +14,61 @@ AUTO_DOWNLOAD_FINETUNED_ADAPTER = True
 FINETUNED_ADAPTER_REPO_ID = ""
 FINETUNED_ADAPTER_REVISION = "main"
 
-# Inference defaults must follow the project baseline model config.
+# Inference defaults stay conservative so the repo can run with minimal setup.
 INFERENCE_MODEL_ID = MODEL_ID
 INFERENCE_REVISION = REVISION
-INFERENCE_CONTEXT_WINDOW = 2048
-# None means "use the full remaining model context budget".
-GENERATION_MAX_NEW_TOKENS = 96
+INFERENCE_CONTEXT_WINDOW = 1536
+GENERATION_MAX_NEW_TOKENS = 64
 GENERATION_MIN_NEW_TOKENS = 16
 GENERATION_TEMPERATURE = 0.0
 MODEL_LOAD_TIMEOUT_SECONDS = 300
-ANSWER_TIMEOUT_SECONDS = 120
+ANSWER_TIMEOUT_SECONDS = 45
+
 # Device selection for eval components: "auto", "cuda", or "cpu".
 BERTSCORE_DEVICE = "auto"
 CRITIC_DEVICE = "auto"
-RETRIEVAL_SIMILARITY_TOP_K = 20
-BM25_SIMILARITY_TOP_K = 15
-RERANK_TOP_N = 5
-RETRIEVAL_FUSION_NUM_QUERIES = 3
 RERANK_DEVICE = "auto"
 EMBEDDING_DEVICE = "auto"
+
+# Retrieval / reranking defaults are intentionally light for notebook runs.
+RETRIEVAL_SIMILARITY_TOP_K = 8
+BM25_SIMILARITY_TOP_K = 6
+RERANK_TOP_N = 3
+RETRIEVAL_FUSION_NUM_QUERIES = 1
 PLANNER_MAX_SUBQUERIES = 1
-DRUG_LOOKUP_MAX_SUBQUERIES = 3
+DRUG_LOOKUP_MAX_SUBQUERIES = 2
+MAX_CONTEXT_DOCS = 2
+MIN_CONTEXT_DOCS = 2
 
 SEED = 42
 
 FAITHFULNESS_THRESHOLD = 0.4
-MAX_RETRIES = 1
+MAX_RETRIES = 0
 
 # Sentence-level entailment floor used by the critic to mark individual claims
 # as unsupported; values below this are considered weak evidence.
 CRITIC_SENTENCE_SUPPORT_THRESHOLD = 0.65
+CRITIC_BATCH_SIZE = 12
 
 # If True, any unsupported claim found by the critic can trigger a retry even
 # when aggregate faithfulness is near threshold.
 RETRY_ON_UNSUPPORTED_CLAIMS = False
 
 # Cross-encoder rerank score gate: chunks scoring below this value are dropped
-# before reaching the generator.  ms-marco-MiniLM-L-6-v2 emits raw logits;
-# 0.0 ≈ 50% relevance — anything below is considered off-topic.
-RERANK_MIN_SCORE = -999  # disable score floor
+# before reaching the generator.
+RERANK_MIN_SCORE = -999
 # Keep only reranked chunks close to the best score to reduce context noise.
-RERANK_SCORE_MARGIN = 1.5
+RERANK_SCORE_MARGIN = 1.0
 
 # Hard cap on context chunks passed to generation after rerank filtering.
-MAX_CONTEXT_DOCS = 3
+MAX_CONTEXT_DOCS = 2
 
 # Soft floor to keep enough evidence chunks when rerank scores are noisy.
-MIN_CONTEXT_DOCS = 3
+MIN_CONTEXT_DOCS = 2
 
 # If the top retrieved chunk score falls below this floor, return a concise
 # insufficient-evidence answer instead of attempting speculative generation.
-LOW_EVIDENCE_SCORE_FLOOR = -999 # disable — CrossEncoder uses negative logits
+LOW_EVIDENCE_SCORE_FLOOR = -999
 
 # Lightweight lexical relevance gate to suppress clearly off-topic chunks that
 # occasionally survive reranking.
@@ -77,11 +83,11 @@ CHUNK_OVERLAP = 32
 FAITHFULNESS_THRESHOLD_GRID = [0.5, 0.6, 0.7, 0.8]
 CHUNK_SIZE_GRID = [128, 256, 512]
 
-# ── Quantization (T4 / 16 GB VRAM) ───────────────────────────────────────
-# BioMistral-7B at fp16 ≈ 14 GB — too tight for a T4 once activations and
-# the KV cache are added.  4-bit NF4 via bitsandbytes brings VRAM down to
-# ~3.5 GB, leaving plenty of headroom for the retrieval pipeline.
+# Quantization for a single-GPU notebook setup.
 LOAD_IN_4BIT = True
-BNB_4BIT_COMPUTE_DTYPE = "bfloat16"   # bf16 math inside 4-bit layers
-BNB_4BIT_QUANT_TYPE = "nf4"           # NormalFloat4 — best quality for LLMs
-BNB_4BIT_USE_DOUBLE_QUANT = True      # nested quantisation saves ~0.4 GB extra
+BNB_4BIT_COMPUTE_DTYPE = "bfloat16"
+BNB_4BIT_QUANT_TYPE = "nf4"
+BNB_4BIT_USE_DOUBLE_QUANT = True
+
+# Evaluation defaults.
+BERTSCORE_MODEL_TYPE = "microsoft/deberta-v3-base"
