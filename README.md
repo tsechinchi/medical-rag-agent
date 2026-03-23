@@ -22,11 +22,9 @@ If the selected model requires Hugging Face authentication, set your token as an
 ```bash
 # Linux/macOS
 export HUGGINGFACE_HUB_TOKEN="<your_token>"
-export TRANSFORMERS_OFFLINE=0
 
 # Windows PowerShell
 $env:HUGGINGFACE_HUB_TOKEN="<your_token>"
-$env:TRANSFORMERS_OFFLINE="0"
 ```
 
 For notebook-based setup, open [`notebooks/00_quick_start.ipynb`](./notebooks/00_quick_start.ipynb). It walks through cloning the repo, authenticating, syncing dependencies with `uv`, downloading the model snapshot from Hugging Face when it is not already cached, and running a smoke test.
