@@ -116,6 +116,13 @@ def retriever(state: AgentState) -> AgentState:
 
     merged = _deduplicate(all_nodes)
 
+    # Early abstention gate for weak retrieval evidence.
+    if merged:
+        top_score = float(merged[0].score or 0.0)
+        evidence_floor = float(getattr(app_config, "LOW_EVIDENCE_SCORE_FLOOR", 0.0))
+        if top_score < evidence_floor:
+            return {**state, "retrieved_docs": []}
+
     # Drop chunks whose rerank score is below the configured relevance gate.
     # This prevents off-topic corpus hits from being passed to the generator.
     min_score: float = getattr(app_config, "RERANK_MIN_SCORE", 0.0)

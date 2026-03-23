@@ -17,7 +17,7 @@ INFERENCE_MODEL_ID = MODEL_ID
 INFERENCE_REVISION = REVISION
 INFERENCE_CONTEXT_WINDOW = 2048
 # None means "use the full remaining model context budget".
-GENERATION_MAX_NEW_TOKENS = 64
+GENERATION_MAX_NEW_TOKENS = 96
 GENERATION_MIN_NEW_TOKENS = 16
 GENERATION_TEMPERATURE = 0.0
 MODEL_LOAD_TIMEOUT_SECONDS = 300
@@ -36,16 +36,16 @@ DRUG_LOOKUP_MAX_SUBQUERIES = 3
 
 SEED = 42
 
-FAITHFULNESS_THRESHOLD = 0.4  # Relaxed from 0.7 to allow more answers through
-MAX_RETRIES = 1  # Increased from 2 to allow 1 more synthesis attempt
+FAITHFULNESS_THRESHOLD = 0.6
+MAX_RETRIES = 2
 
 # Sentence-level entailment floor used by the critic to mark individual claims
 # as unsupported; values below this are considered weak evidence.
-CRITIC_SENTENCE_SUPPORT_THRESHOLD = 0.65  # Relaxed from 0.7
+CRITIC_SENTENCE_SUPPORT_THRESHOLD = 0.65
 
 # If True, any unsupported claim found by the critic can trigger a retry even
 # when aggregate faithfulness is near threshold.
-RETRY_ON_UNSUPPORTED_CLAIMS = False
+RETRY_ON_UNSUPPORTED_CLAIMS = True
 
 # Cross-encoder rerank score gate: chunks scoring below this value are dropped
 # before reaching the generator.  ms-marco-MiniLM-L-6-v2 emits raw logits;

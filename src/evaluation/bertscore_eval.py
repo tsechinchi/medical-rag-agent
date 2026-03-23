@@ -10,15 +10,7 @@ from bert_score import score as bert_score
 
 from config import config as app_config
 from src.graph.graph import compile_graph
-
-
-import re as _re
-def _clean_answer(text):
-    text = _re.sub(r"\[\d+\]", "", text)
-    text = _re.sub(r"\[Evidence[^\]]*\]", "", text)
-    text = _re.sub(r"\[Partially[^\]]*\]", "", text)
-    text = _re.sub(r"Medical disclaimer:.*", "", text, flags=_re.IGNORECASE)
-    return text.strip()
+from src.utils.answer_cleaning import clean_for_scoring
 
 
 TEST_SET_PATH = Path("data/eval/test_set.json")
@@ -86,8 +78,8 @@ def run_bertscore_evaluation(test_set: list[dict] | None = None) -> pd.DataFrame
             questions.append(row["question"])
 
     _, _, f1 = bert_score(
-        preds,
-        refs,
+        [clean_for_scoring(pred) for pred in preds],
+        [clean_for_scoring(ref) for ref in refs],
         model_type=MODEL_TYPE,
         verbose=False,
         device=_resolve_bertscore_device(),

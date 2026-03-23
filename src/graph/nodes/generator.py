@@ -3,6 +3,7 @@ from __future__ import annotations
 from llama_index.core import Settings
 from src.graph.state import AgentState
 from src.model.prompts import build_generation_prompt
+from src.utils.answer_cleaning import INSUFFICIENT_EVIDENCE, is_corrupted_output
 
 def _docs_to_context_blocks(docs):
     blocks = []
@@ -38,9 +39,13 @@ def generator(state: AgentState) -> AgentState:
 
     llm = Settings.llm
     response = llm.complete(prompt)
+    draft_answer = response.text.strip()
+    if is_corrupted_output(draft_answer):
+        draft_answer = INSUFFICIENT_EVIDENCE
+
     return {
         **state,
-        "draft_answer": response.text.strip(),
-        "confidence_level": 0.9,
+        "draft_answer": draft_answer,
+        "confidence_level": 0.0,
         "critic_feedback": "",
     }

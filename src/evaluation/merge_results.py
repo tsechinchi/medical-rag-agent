@@ -61,6 +61,7 @@ def _summarize_variant(variant: str, df: pd.DataFrame) -> dict:
         "latency_per_query_s": _safe_mean(df, "latency_per_query_s"),
         "abstention_precision": abstention_precision,
         "unsupported_claims_rate": _safe_mean(df, "unsupported_claims_count") if "unsupported_claims_count" in df.columns else None,
+        "corrupted_output_rate": _safe_mean(df, "corrupted_output_detected") if "corrupted_output_detected" in df.columns else None,
     }
 
 
@@ -114,6 +115,7 @@ def merge_results() -> pd.DataFrame:
             "latency_per_query_s": _safe_mean(rdf, "latency_per_query_s") if has_valid else None,
             "abstention_precision": abstention_precision,
             "unsupported_claims_rate": unsupported_claims_rate,
+            "corrupted_output_rate": _safe_mean(rdf, "corrupted_output_detected") if has_valid else None,
         })
 
     # Ablations

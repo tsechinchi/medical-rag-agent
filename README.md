@@ -41,10 +41,10 @@ The system prioritizes **evidence-based answers over speculation** through multi
 ### 2. NLI Faithfulness Validation
 - **Sentence-Level Support** (threshold: 0.65): Each sentence must be supported by retrieved context
 - **Entailment Checking**: Uses cross-encoder NLI model to validate claims
-- **Retry Loop** (max 3 attempts): On faithfulness failure, system retries with feedback
+- **Retry Loop** (max 2 attempts): On faithfulness failure, system retries with feedback
 
 ### 3. Confidence Thresholds
-- **FAITHFULNESS_THRESHOLD**: 0.65 (aggregate answer must be ≥65% supported)
+- **FAITHFULNESS_THRESHOLD**: 0.60 (aggregate answer must be ≥60% supported)
 - **CRITIC_SENTENCE_SUPPORT_THRESHOLD**: 0.65 (per-sentence requirement)
 - **Abstention Strategy**: "The available evidence does not directly address this question" when confidence is insufficient
 
@@ -105,13 +105,19 @@ Inference defaults tuned in `config/config.py` for constrained T4-style GPU (16 
 
 | Setting | Value | Purpose |
 |---------|-------|---------|
-| `FAITHFULNESS_THRESHOLD` | 0.65 | Critic validation threshold (0.7→0.65 v2.0) |
+| `FAITHFULNESS_THRESHOLD` | 0.60 | Critic validation threshold |
 | `CRITIC_SENTENCE_SUPPORT_THRESHOLD` | 0.65 | Per-sentence NLI floor (0.7→0.65 v2.0) |
-| `MAX_RETRIES` | 3 | Max synthesis retry attempts (2→3 v2.0) |
+| `MAX_RETRIES` | 2 | Max synthesis retry attempts |
 | `LOW_EVIDENCE_SCORE_FLOOR` | 0.10 | Retrieval confidence gate (0.2→0.10 v2.0) |
 | `ANSWER_TIMEOUT_SECONDS` | 120 | Hard wall-clock timeout |
 | `INFERENCE_MODEL_ID` | BioMistral/BioMistral-7B | Medical domain LLM |
 | `LOAD_IN_4BIT` | True | 4-bit NF4 quantization |
+
+Single-GPU runtime target (1x T4):
+
+- Keep `--with-ragas-judge` disabled for standard runs.
+- Use `BERTSCORE_BATCH_SIZE=8` and `--n_samples 200` max per run.
+- Expected wall-clock remains within 2.5 hours in fast mode on one T4.
 
 Override `INFERENCE_MODEL_ID` and `INFERENCE_REVISION` to test alternative models.
 

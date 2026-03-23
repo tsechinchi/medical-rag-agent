@@ -9,16 +9,13 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from config import config as app_config
 from src.graph.state import AgentState
 from src.model.prompts import classify_query_mode
+from src.utils.answer_cleaning import is_abstention
 
 
 NLI_MODEL = "cross-encoder/nli-deberta-v3-small"
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 _NUMBER_RE = re.compile(r"\b\d+(?:\.\d+)?\b")
 _INLINE_CITATION_RE = re.compile(r"\[(\d+)\]")
-_INSUFFICIENT_EVIDENCE_PREFIX = "the available evidence does not directly address this question"
-_INSUFFICIENT_DOSING_PREFIX = "the available evidence does not directly address the exact dosing schedule"
-
-
 def _resolve_critic_device() -> str:
     configured = str(getattr(app_config, "CRITIC_DEVICE", "auto")).lower()
     if configured == "auto":
@@ -121,13 +118,11 @@ def critic(state: AgentState) -> AgentState:
 
     # If the generator intentionally abstained due to low/no evidence, do not
     # force retries; this is a valid grounded response.
-    lowered_draft = draft.strip().lower()
-    if lowered_draft.startswith(_INSUFFICIENT_EVIDENCE_PREFIX) or lowered_draft.startswith(
-        _INSUFFICIENT_DOSING_PREFIX
-    ):
+    if is_abstention(draft):
         return {
             **state,
             "faithfulness_score": 1.0,
+            "confidence_level": 0.0,
             "critic_feedback": "",
             "unsupported_claims_count": 0,
         }
@@ -139,6 +134,7 @@ def critic(state: AgentState) -> AgentState:
             return {
                 **state,
                 "faithfulness_score": 1.0 if not anchor_feedback else 0.0,
+                "confidence_level": 0.0,
                 "critic_feedback": feedback,
                 "unsupported_claims_count": len(anchor_feedback),
             }
@@ -146,6 +142,7 @@ def critic(state: AgentState) -> AgentState:
         return {
             **state,
             "faithfulness_score": 0.0,
+            "confidence_level": 0.0,
             "critic_feedback": feedback,
             "unsupported_claims_count": len(anchor_feedback),
         }
@@ -169,6 +166,7 @@ def critic(state: AgentState) -> AgentState:
     return {
         **state,
         "faithfulness_score": faithfulness_score,
+        "confidence_level": max(0.0, min(1.0, float(faithfulness_score))),
         "critic_feedback": critic_feedback,
         "unsupported_claims_count": len(feedback_items),
     }
