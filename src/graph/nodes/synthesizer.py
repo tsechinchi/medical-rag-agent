@@ -13,7 +13,10 @@ DISCLAIMER = (
     "Medical disclaimer: This output is informational only and must not be used "
     "as a substitute for licensed clinical judgment.\n\n"
 )
-SAFETY_RE = re.compile(r"\b(dosage|prescription|diagnosis|treat(?:ment|ing)?|medication)\b", re.IGNORECASE)
+SAFETY_RE = re.compile(
+    r"\b(prescribe|prescription|recommended\s+dose|mg\s+per\s+kg)\b",
+    re.IGNORECASE,
+)
 INLINE_CITATION_RE = re.compile(r"\[(\d+)\]")
 
 

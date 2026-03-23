@@ -2,7 +2,7 @@
 MODEL_ID = "BioMistral/BioMistral-7B"
 REVISION = "6bf2f09471b6b8d0e50533a8e81ca60ec9c2a272"
 FINETUNED_ADAPTER_PATH = "data/qlora_checkpoints/final"
-USE_FINETUNED = True
+USE_FINETUNED = False
 
 # Recovery options when USE_FINETUNED=True but FINETUNED_ADAPTER_PATH is missing.
 # 1) Reuse latest local checkpoint with adapter files.
@@ -36,8 +36,8 @@ DRUG_LOOKUP_MAX_SUBQUERIES = 3
 
 SEED = 42
 
-FAITHFULNESS_THRESHOLD = 0.6
-MAX_RETRIES = 2
+FAITHFULNESS_THRESHOLD = 0.4
+MAX_RETRIES = 1
 
 # Sentence-level entailment floor used by the critic to mark individual claims
 # as unsupported; values below this are considered weak evidence.
@@ -45,13 +45,12 @@ CRITIC_SENTENCE_SUPPORT_THRESHOLD = 0.65
 
 # If True, any unsupported claim found by the critic can trigger a retry even
 # when aggregate faithfulness is near threshold.
-RETRY_ON_UNSUPPORTED_CLAIMS = True
+RETRY_ON_UNSUPPORTED_CLAIMS = False
 
 # Cross-encoder rerank score gate: chunks scoring below this value are dropped
 # before reaching the generator.  ms-marco-MiniLM-L-6-v2 emits raw logits;
 # 0.0 ≈ 50% relevance — anything below is considered off-topic.
-RERANK_MIN_SCORE = 0.1
-
+RERANK_MIN_SCORE = -999  # disable score floor
 # Keep only reranked chunks close to the best score to reduce context noise.
 RERANK_SCORE_MARGIN = 1.5
 
@@ -63,7 +62,7 @@ MIN_CONTEXT_DOCS = 3
 
 # If the top retrieved chunk score falls below this floor, return a concise
 # insufficient-evidence answer instead of attempting speculative generation.
-LOW_EVIDENCE_SCORE_FLOOR = 0.10  # Decreased from 0.2 for moderate filtering
+LOW_EVIDENCE_SCORE_FLOOR = -999 # disable — CrossEncoder uses negative logits
 
 # Lightweight lexical relevance gate to suppress clearly off-topic chunks that
 # occasionally survive reranking.

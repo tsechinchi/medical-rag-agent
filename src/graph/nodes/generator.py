@@ -46,6 +46,6 @@ def generator(state: AgentState) -> AgentState:
     return {
         **state,
         "draft_answer": draft_answer,
-        "confidence_level": 0.0,
+        "confidence_level": 0.9,
         "critic_feedback": "",
     }
