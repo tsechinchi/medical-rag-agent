@@ -17,6 +17,20 @@ uv sync --extra cpu
 uv sync --extra gpu
 ```
 
+If the selected model requires Hugging Face authentication, set your token as an environment variable (never hardcode it in source files):
+
+```bash
+# Linux/macOS
+export HUGGINGFACE_HUB_TOKEN="<your_token>"
+export TRANSFORMERS_OFFLINE=0
+
+# Windows PowerShell
+$env:HUGGINGFACE_HUB_TOKEN="<your_token>"
+$env:TRANSFORMERS_OFFLINE="0"
+```
+
+To switch from offline to online model loading, set `local_files_only=False` in `src/model/loader.py`.
+
 ## Pipeline
 
 ```bash
@@ -26,7 +40,7 @@ uv run python src/data/build_indices.py
 uv run python -m src.evaluation.build_test_set
 uv run python -m src.evaluation.run_eval
 uv run python -m src.evaluation.plot_results
-uv run streamlit run src/app.py
+uv run streamlit run src/app.py # skip eval if not needed
 ```
 
 ## Safety-First Architecture
