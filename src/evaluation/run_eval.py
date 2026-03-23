@@ -25,7 +25,9 @@ if str(_ROOT) not in _sys.path:
 from pathlib import Path
 
 from config import config as app_config
+from src.evaluation.bertscore_eval import run_bertscore_evaluation
 from src.evaluation.merge_results import merge_results
+from src.evaluation.model_free_eval import run_model_free_evaluation
 from src.model.llm_wrapper import QuantizedHFLLM, register_llm
 from src.model.loader import load_model_and_tokenizer
 from src.utils.seed import set_seed
@@ -88,18 +90,10 @@ def main() -> None:
             print("RAGAS LLM-judge metrics enabled (--with-ragas-judge).")
         else:
             print("RAGAS LLM-judge metrics disabled (fast mode default).")
-        from src.evaluation.model_free_eval import run_model_free_evaluation
         run_model_free_evaluation(llm=llm if args.with_ragas_judge else None, test_set=test_set)
 
     if not args.skip_bertscore:
         print("Running BERTScore evaluation...")
-        try:
-            from src.evaluation.bertscore_eval import run_bertscore_evaluation
-        except ModuleNotFoundError as exc:
-            raise ModuleNotFoundError(
-                "BERTScore is not installed. Install the optional dependency with "
-                "`pip install bert-score` or rerun with --skip-bertscore."
-            ) from exc
         run_bertscore_evaluation(test_set=test_set)
 
     print("Merging evaluation outputs...")

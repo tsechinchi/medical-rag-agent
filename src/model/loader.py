@@ -48,19 +48,9 @@ def _model_cache_path() -> Path:
     return Path(getattr(app_config, "MODEL_CACHE_DIR", "models/biomistral-7b"))
 
 
-def _has_complete_model_snapshot(path: Path) -> bool:
-    if not path.exists() or not path.is_dir():
-        return False
-
-    has_config = (path / "config.json").exists()
-    has_tokenizer = (path / "tokenizer.json").exists() or (path / "tokenizer.model").exists()
-    has_weights = any(path.glob("*.safetensors")) or any(path.glob("*.bin"))
-    return has_config and has_tokenizer and has_weights
-
-
 def _model_source_path(model_id: str) -> str:
     cache_path = _model_cache_path()
-    if _has_complete_model_snapshot(cache_path):
+    if cache_path.exists():
         return str(cache_path)
     return model_id
 
@@ -81,7 +71,7 @@ def _load_tokenizer_with_revision_fallback(
                 trust_remote_code=True,
             ),
         )
-    except (RevisionNotFoundError, ValueError, OSError, TypeError):
+    except (RevisionNotFoundError, ValueError, OSError):
         if local_files_only:
             raise
         if revision == "main":
@@ -120,7 +110,7 @@ def _load_model_with_revision_fallback(
                 **load_kwargs,
             ),
         )
-    except (RevisionNotFoundError, ValueError, OSError, TypeError):
+    except (RevisionNotFoundError, ValueError, OSError):
         if local_files_only:
             raise
         if revision == "main":
@@ -254,12 +244,6 @@ def _load_model_and_tokenizer_cached(
         revision = app_config.REVISION
 
     cache_path = _model_cache_path()
-    cache_ready = _has_complete_model_snapshot(cache_path)
-    if cache_path.exists() and not cache_ready and _use_local_files_only():
-        raise FileNotFoundError(
-            f"Model cache at {cache_path} is incomplete. "
-            "Download the snapshot once, or delete the partial directory and retry."
-        )
 
     tokenizer = _load_tokenizer_with_revision_fallback(model_id, revision)
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
