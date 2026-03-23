@@ -26,7 +26,6 @@ from pathlib import Path
 
 from config import config as app_config
 from src.evaluation.merge_results import merge_results
-from src.evaluation.model_free_eval import run_model_free_evaluation
 from src.model.llm_wrapper import QuantizedHFLLM, register_llm
 from src.model.loader import load_model_and_tokenizer
 from src.utils.seed import set_seed
@@ -89,6 +88,7 @@ def main() -> None:
             print("RAGAS LLM-judge metrics enabled (--with-ragas-judge).")
         else:
             print("RAGAS LLM-judge metrics disabled (fast mode default).")
+        from src.evaluation.model_free_eval import run_model_free_evaluation
         run_model_free_evaluation(llm=llm if args.with_ragas_judge else None, test_set=test_set)
 
     if not args.skip_bertscore:
