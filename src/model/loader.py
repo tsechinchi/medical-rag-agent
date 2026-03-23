@@ -65,34 +65,6 @@ def _model_source_path(model_id: str) -> str:
     return model_id
 
 
-def _download_model_snapshot(model_id: str, revision: str) -> Path:
-    cache_path = _model_cache_path()
-    cache_path.mkdir(parents=True, exist_ok=True)
-    try:
-        snapshot_download(
-            repo_id=model_id,
-            revision=revision,
-            local_dir=str(cache_path),
-            local_dir_use_symlinks=False,
-        )
-    except RevisionNotFoundError:
-        fallback_revision = "main"
-        if revision != fallback_revision:
-            print(
-                f"Warning: revision '{revision}' was not found for {model_id}. "
-                f"Falling back to '{fallback_revision}'."
-            )
-            snapshot_download(
-                repo_id=model_id,
-                revision=fallback_revision,
-                local_dir=str(cache_path),
-                local_dir_use_symlinks=False,
-            )
-        else:
-            raise
-    return cache_path
-
-
 def _load_tokenizer_with_revision_fallback(
     model_id: str,
     revision: str,
@@ -112,10 +84,16 @@ def _load_tokenizer_with_revision_fallback(
     except (RevisionNotFoundError, ValueError, OSError, TypeError):
         if local_files_only:
             raise
-        _download_model_snapshot(model_id, revision)
+        if revision == "main":
+            raise
         return cast(
             PreTrainedTokenizerBase,
-            AutoTokenizer.from_pretrained(str(_model_cache_path()), local_files_only=True, trust_remote_code=True),
+            AutoTokenizer.from_pretrained(
+                source,
+                revision="main",
+                local_files_only=False,
+                trust_remote_code=True,
+            ),
         )
 
 
@@ -145,15 +123,14 @@ def _load_model_with_revision_fallback(
     except (RevisionNotFoundError, ValueError, OSError, TypeError):
         if local_files_only:
             raise
-        # Revision may not exist on Hub; load from local cache to avoid the
-        # "Unrecognized model" ValueError that newer transformers raises when
-        # it can't fetch the config.json at the given revision.
-        _download_model_snapshot(model_id, revision)
+        if revision == "main":
+            raise
         return cast(
             PreTrainedModel,
             AutoModelForCausalLM.from_pretrained(
-                str(_model_cache_path()),
-                local_files_only=True,
+                source,
+                revision="main",
+                local_files_only=False,
                 **load_kwargs,
             ),
         )
@@ -278,11 +255,7 @@ def _load_model_and_tokenizer_cached(
 
     cache_path = _model_cache_path()
     cache_ready = _has_complete_model_snapshot(cache_path)
-    if not cache_ready and not _use_local_files_only():
-        print(f"Downloading model snapshot into {cache_path} ...")
-        _download_model_snapshot(model_id, revision)
-        cache_ready = True
-    elif cache_path.exists() and not cache_ready and _use_local_files_only():
+    if cache_path.exists() and not cache_ready and _use_local_files_only():
         raise FileNotFoundError(
             f"Model cache at {cache_path} is incomplete. "
             "Download the snapshot once, or delete the partial directory and retry."
