@@ -3,7 +3,8 @@ from pathlib import Path
 
 
 MODEL_ID = "BioMistral/BioMistral-7B"
-REVISION = "6bf2f09471b6b8d0e50533a8e81ca60ec9c2a272"
+# Use a moving ref by default to avoid broken pinned snapshot SHAs.
+REVISION = "main"
 MODEL_CACHE_DIR = str(Path("models") / "biomistral-7b")
 FINETUNED_ADAPTER_PATH = "data/qlora_checkpoints/final"
 USE_FINETUNED = False

@@ -68,12 +68,28 @@ def _model_source_path(model_id: str) -> str:
 def _download_model_snapshot(model_id: str, revision: str) -> Path:
     cache_path = _model_cache_path()
     cache_path.mkdir(parents=True, exist_ok=True)
-    snapshot_download(
-        repo_id=model_id,
-        revision=revision,
-        local_dir=str(cache_path),
-        local_dir_use_symlinks=False,
-    )
+    try:
+        snapshot_download(
+            repo_id=model_id,
+            revision=revision,
+            local_dir=str(cache_path),
+            local_dir_use_symlinks=False,
+        )
+    except RevisionNotFoundError:
+        fallback_revision = "main"
+        if revision != fallback_revision:
+            print(
+                f"Warning: revision '{revision}' was not found for {model_id}. "
+                f"Falling back to '{fallback_revision}'."
+            )
+            snapshot_download(
+                repo_id=model_id,
+                revision=fallback_revision,
+                local_dir=str(cache_path),
+                local_dir_use_symlinks=False,
+            )
+        else:
+            raise
     return cache_path
 
 
