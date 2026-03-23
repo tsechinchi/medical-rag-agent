@@ -29,7 +29,7 @@ $env:HUGGINGFACE_HUB_TOKEN="<your_token>"
 $env:TRANSFORMERS_OFFLINE="0"
 ```
 
-For notebook-based setup, open [`notebooks/00_quick_start.ipynb`](./notebooks/00_quick_start.ipynb). It walks through cloning the repo, authenticating, syncing dependencies with `uv`, reusing a local model snapshot when available, downloading it once if online, and running a smoke test.
+For notebook-based setup, open [`notebooks/00_quick_start.ipynb`](./notebooks/00_quick_start.ipynb). It walks through cloning the repo, authenticating, syncing dependencies with `uv`, reusing a local model snapshot when available, downloading it once if online, and skipping the generation smoke test when no snapshot is present.
 
 ## Pipeline
 
