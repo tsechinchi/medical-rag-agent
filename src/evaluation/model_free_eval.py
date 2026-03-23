@@ -5,14 +5,6 @@ import time
 from pathlib import Path
 
 import pandas as pd
-from datasets import Dataset
-from ragas import evaluate
-from ragas.metrics import (
-    answer_relevancy,
-    context_precision,
-    context_recall,
-    faithfulness,
-)
 
 from src.graph.graph import compile_graph
 from src.evaluation.run_metadata import annotate_with_run_metadata
@@ -233,6 +225,21 @@ def run_model_free_evaluation(llm=None, test_set: list[dict] | None = None) -> p
     )
 
     if llm is not None:
+        try:
+            from datasets import Dataset
+            from ragas import evaluate
+            from ragas.metrics import (
+                answer_relevancy,
+                context_precision,
+                context_recall,
+                faithfulness,
+            )
+        except ModuleNotFoundError as exc:
+            raise ModuleNotFoundError(
+                "RAGAS is not installed. Install the optional dependency with "
+                "`pip install ragas` or rerun with --skip-model-free."
+            ) from exc
+
         ragas_dataset = Dataset.from_list(ragas_rows)
         from ragas.dataset_schema import EvaluationResult
         from ragas.run_config import RunConfig
