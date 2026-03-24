@@ -60,7 +60,7 @@ def _remove_noise_lines(text: str) -> str:
     return "\n".join(lines)
 
 
-def limit_sentences(text: str, max_sentences: int = 3) -> str:
+def limit_sentences(text: str, max_sentences: int = 10) -> str:
     parts = re.split(r"(?<=[.!?])\s+", (text or "").strip())
     kept: list[str] = []
     for part in parts:
