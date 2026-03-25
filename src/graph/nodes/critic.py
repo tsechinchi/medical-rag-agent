@@ -92,6 +92,15 @@ def _normalize_sentence_for_nli(sentence: str) -> str:
     return cleaned
 
 
+def _should_score_sentence(sentence: str) -> bool:
+    normalized = _normalize_sentence_for_nli(sentence)
+    if not normalized:
+        return False
+    if not re.search(r"[a-z0-9]", normalized, re.IGNORECASE):
+        return False
+    return True
+
+
 def _sentence_support(sentences: list[str], docs) -> tuple[list[float], list[str]]:
     scores: list[float] = []
     feedback: list[str] = []
@@ -101,7 +110,7 @@ def _sentence_support(sentences: list[str], docs) -> tuple[list[float], list[str
 
     for sentence in sentences:
         normalized = _normalize_sentence_for_nli(sentence)
-        if len(normalized) < 12:
+        if not _should_score_sentence(normalized):
             continue
         normalized_sentences.append(normalized)
         for node in docs:
@@ -200,3 +209,8 @@ def critic(state: AgentState) -> AgentState:
         "critic_feedback": critic_feedback,
         "unsupported_claims_count": len(feedback_items),
     }
+
+
+def clear_critic_cache() -> None:
+    """Release the cached NLI model/tokenizer pair."""
+    _load_nli_components.cache_clear()

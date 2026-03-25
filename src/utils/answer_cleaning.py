@@ -7,6 +7,10 @@ INSUFFICIENT_EVIDENCE = "The available evidence does not directly address this q
 INSUFFICIENT_DOSING = "The available evidence does not directly address the exact dosing schedule."
 
 _INLINE_CITATION_RE = re.compile(r"\[(\d+)\]")
+_PARTIAL_PREFIX_RE = re.compile(
+    r"^(?:\[(?:partially supported|weakly supported|strongly supported)\]\s*)+",
+    re.IGNORECASE,
+)
 _EVIDENCE_LABEL_RE = re.compile(r"\[Evidence Confidence:[^\]]*\]", re.IGNORECASE)
 _DISCLAIMER_RE = re.compile(
     r"^medical disclaimer:.*$",
@@ -75,6 +79,7 @@ def limit_sentences(text: str, max_sentences: int = 10) -> str:
 
 def clean_answer_text(text: str, *, max_sentences: int | None = 3) -> str:
     cleaned = (text or "").replace("```json", "").replace("```", "").strip()
+    cleaned = _PARTIAL_PREFIX_RE.sub("", cleaned)
     cleaned = _DISCLAIMER_RE.sub("", cleaned)
     cleaned = _remove_noise_lines(cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
@@ -87,6 +92,7 @@ def clean_for_scoring(text: str) -> str:
     cleaned = clean_answer_text(text, max_sentences=None)
     cleaned = _INLINE_CITATION_RE.sub("", cleaned)
     cleaned = _EVIDENCE_LABEL_RE.sub("", cleaned)
+    cleaned = _PARTIAL_PREFIX_RE.sub("", cleaned)
     cleaned = _DISCLAIMER_RE.sub("", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned

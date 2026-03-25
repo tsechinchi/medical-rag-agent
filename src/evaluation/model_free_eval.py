@@ -3,26 +3,38 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from typing import Any, Iterable
 
 import pandas as pd
-from datasets import Dataset
-from ragas import evaluate
-from ragas.metrics import (
-    answer_relevancy,
-    context_precision,
-    context_recall,
-    faithfulness,
-)
+from tqdm import tqdm
 
+from llama_index.core import Settings
+
+from src.evaluation.result_utils import load_csv_if_exists
+from src.evaluation.runtime import EvalRuntime, resolve_eval_runtime
+from src.evaluation.run_metadata import annotate_with_run_metadata, compute_run_id, resolve_run_id
+from src.evaluation.structured_judge import JudgeRow, build_structured_judge
 from src.graph.graph import compile_graph
-from src.evaluation.run_metadata import annotate_with_run_metadata
+from src.graph.nodes.critic import clear_critic_cache
+from src.graph.nodes.retriever import clear_retriever_cache
+from src.model.loader import clear_model_cache
 from src.utils.answer_cleaning import clean_for_scoring, is_abstention, is_corrupted_output
+from src.utils.memory import flush_gpu
 
 
 TEST_SET_PATH = Path("data/eval/test_set.json")
 OUT_PATH = Path("experiments/model_free_eval_results.csv")
-_EMBED_MODEL_NAME = "BAAI/bge-small-en-v1.5"
-_MAX_CONTEXT_DOCS = 3
+LEGACY_OUT_PATH = Path("experiments/ragas_results.csv")
+_REQUIRED_BASE_COLUMNS = {
+    "question",
+    "answer",
+    "raw_answer",
+    "ground_truth",
+    "retrieved_contexts_json",
+    "faithfulness_nli",
+    "latency_per_query_s",
+    "abstention_detected",
+}
 
 
 def _load_test_set(test_set: list[dict] | None = None) -> list[dict]:
@@ -31,244 +43,240 @@ def _load_test_set(test_set: list[dict] | None = None) -> list[dict]:
     return json.loads(TEST_SET_PATH.read_text(encoding="utf-8"))
 
 
-def _build_ragas_llm(llm):
-    """Smaller instruction-tuned judge optimized for stable high-throughput scoring."""
-    import json as _json
-    import torch
-    from langchain_core.outputs import Generation, LLMResult
-    from langchain_core.prompt_values import PromptValue
-    from ragas.llms import BaseRagasLLM
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+def _iter_chunks(items: list[int], chunk_size: int) -> Iterable[list[int]]:
+    size = max(1, int(chunk_size))
+    for start in range(0, len(items), size):
+        yield items[start : start + size]
 
-    # Smaller judge model to keep end-to-end eval within wall-clock budget on a single L4.
-    judge_model_id = "Qwen/Qwen2.5-3B-Instruct"
-    bnb = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_use_double_quant=True,
+
+def _row_has_base_columns(row: dict[str, Any]) -> bool:
+    return _REQUIRED_BASE_COLUMNS.issubset(row.keys())
+
+
+def _load_existing_rows(path: Path, expected_run_id: str) -> dict[str, dict[str, Any]]:
+    df = load_csv_if_exists(path)
+    if df.empty or "question" not in df.columns:
+        return {}
+
+    resolved_run_id = resolve_run_id(df, "question")
+    if resolved_run_id != expected_run_id:
+        return {}
+
+    deduped = df.drop_duplicates(subset=["question"], keep="last")
+    rows: dict[str, dict[str, Any]] = {}
+    for record in deduped.to_dict(orient="records"):
+        rows[str(record.get("question", ""))] = record
+    return rows
+
+
+def _build_base_record(
+    *,
+    question: str,
+    ground_truth: str,
+    result: dict[str, Any],
+    latency_s: float,
+    max_context_docs: int,
+) -> dict[str, Any]:
+    raw_answer = str(result.get("final_answer", result.get("draft_answer", "")) or "")
+    answer = clean_for_scoring(raw_answer)
+    retrieved_docs = result.get("retrieved_docs", []) or []
+    retrieved_contexts = [
+        str(node.get_content())
+        for node in retrieved_docs[:max_context_docs]
+        if hasattr(node, "get_content")
+    ]
+    top_score = 0.0
+    if retrieved_docs:
+        top_doc = retrieved_docs[0]
+        top_score = float(getattr(top_doc, "score", 0.0) or 0.0)
+
+    faithfulness = round(float(result.get("faithfulness_score", 0.0) or 0.0), 4)
+    retry_count = int(result.get("retry_count", 0) or 0)
+    unsupported_claims = int(result.get("unsupported_claims_count", 0) or 0)
+
+    return {
+        "question": question,
+        "answer": answer,
+        "raw_answer": raw_answer,
+        "ground_truth": ground_truth,
+        "retrieved_contexts_json": json.dumps(retrieved_contexts, ensure_ascii=False),
+        "faithfulness": faithfulness,
+        "faithfulness_nli": faithfulness,
+        "faithfulness_ragas": None,
+        "answer_relevancy": None,
+        "context_precision": None,
+        "context_recall": None,
+        "latency_per_query_s": round(float(latency_s), 4),
+        "avg_retries": retry_count,
+        "abstention_detected": 1 if is_abstention(answer) else 0,
+        "unsupported_claims_count": unsupported_claims,
+        "citation_count": raw_answer.count("[") if "[" in raw_answer else 0,
+        "retry_count": retry_count,
+        "evidence_score": top_score,
+        "corrupted_output_detected": 1 if is_corrupted_output(raw_answer) else 0,
+    }
+
+
+def _release_graph_resources() -> None:
+    Settings.llm = None
+    clear_model_cache()
+    clear_retriever_cache()
+    clear_critic_cache()
+    flush_gpu()
+
+
+def _write_results(
+    df: pd.DataFrame,
+    *,
+    questions: list[str],
+    metadata: dict[str, Any],
+    output_path: Path,
+) -> pd.DataFrame:
+    annotated = annotate_with_run_metadata(df, questions, metadata=metadata)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    annotated.to_csv(output_path, index=False)
+    annotated.to_csv(LEGACY_OUT_PATH, index=False)
+    return annotated
+
+
+def _score_with_judge(
+    df: pd.DataFrame,
+    runtime: EvalRuntime,
+    *,
+    questions: list[str],
+    metadata: dict[str, Any],
+    output_path: Path,
+) -> pd.DataFrame:
+    if df.empty or not runtime.judge_enabled:
+        return df
+
+    judge = build_structured_judge(
+        model_id=runtime.judge_model_id,
+        max_new_tokens=runtime.judge_max_new_tokens,
+        max_context_docs=runtime.max_context_docs,
+        timeout_seconds=runtime.judge_timeout_seconds,
     )
-    judge_tokenizer = AutoTokenizer.from_pretrained(judge_model_id)
-    judge_tokenizer.pad_token = judge_tokenizer.eos_token
-    judge_tokenizer.padding_side = "left"  # required for correct batched generation
-    judge_model = AutoModelForCausalLM.from_pretrained(
-        judge_model_id,
-        quantization_config=bnb,
-        device_map={"": 0},  # force all layers onto cuda:0; bnb-4bit cannot run on CPU
-    )
 
-    _SYSTEM = (
-        "You are a JSON-only evaluation assistant. "
-        "Always respond with a single valid JSON object or array. "
-        "Do not include any explanation, markdown fences, or text outside the JSON."
-    )
-
-    def _extract_json(text: str) -> str:
-        try:
-            _json.loads(text)
-            return text
-        except Exception:
-            pass
-        for fence in ("```json", "```"):
-            if fence in text:
-                inner = text.split(fence, 1)[1].split("```", 1)[0].strip()
-                try:
-                    _json.loads(inner)
-                    return inner
-                except Exception:
-                    text = inner
-                    break
-        for open_ch, close_ch in [('{', '}'), ('[', ']')]:
-            start = text.find(open_ch)
-            if start == -1:
-                continue
-            depth = 0
-            for i, ch in enumerate(text[start:], start=start):
-                if ch == open_ch:
-                    depth += 1
-                elif ch == close_ch:
-                    depth -= 1
-                    if depth == 0:
-                        candidate = text[start:i + 1]
-                        try:
-                            _json.loads(candidate)
-                            return candidate
-                        except Exception:
-                            break
-        return text
-
-    def _generate_batch(texts: list[str]) -> list[str]:
-        """Tokenize and run a batch of prompts in one model.generate() call."""
-        formatted = [
-            judge_tokenizer.apply_chat_template(
-                [{"role": "system", "content": _SYSTEM}, {"role": "user", "content": t}],
-                tokenize=False,
-                add_generation_prompt=True,
-            )
-            for t in texts
+    try:
+        pending_indices = [
+            idx
+            for idx, row in df.iterrows()
+            if pd.isna(row.get("faithfulness_ragas"))
+            or pd.isna(row.get("answer_relevancy"))
+            or pd.isna(row.get("context_precision"))
+            or pd.isna(row.get("context_recall"))
         ]
-        inputs = judge_tokenizer(
-            formatted,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=3072,
-        ).to(judge_model.device)
-        with torch.no_grad():
-            outputs = judge_model.generate(
-                **inputs,
-                max_new_tokens=384,  # shorter JSON outputs improve throughput
-                do_sample=False,
-                pad_token_id=judge_tokenizer.eos_token_id,
-            )
-        n_input = inputs["input_ids"].shape[1]
-        return [
-            _extract_json(judge_tokenizer.decode(seq[n_input:], skip_special_tokens=True).strip())
-            for seq in outputs
-        ]
+        if not pending_indices:
+            return df
 
-    class MistralJudgeLLM(BaseRagasLLM):
-        def _render(self, prompt: PromptValue | str) -> str:
-            if isinstance(prompt, str):
-                return prompt
-            if hasattr(prompt, "to_string"):
-                return prompt.to_string()
-            return str(prompt)
+        for chunk_indices in tqdm(
+            _iter_chunks(pending_indices, runtime.checkpoint_every_rows),
+            desc="Judge scoring",
+            unit="chunk",
+            dynamic_ncols=True,
+        ):
+            judge_rows = []
+            for idx in chunk_indices:
+                row = df.loc[idx]
+                contexts: list[str] = []
+                raw_contexts = row.get("retrieved_contexts_json", "[]")
+                if isinstance(raw_contexts, str):
+                    try:
+                        parsed_contexts = json.loads(raw_contexts)
+                        if isinstance(parsed_contexts, list):
+                            contexts = [str(ctx) for ctx in parsed_contexts]
+                    except Exception:
+                        contexts = []
+                judge_rows.append(
+                    JudgeRow(
+                        question=str(row["question"]),
+                        answer=str(row.get("answer", "")),
+                        reference=str(row.get("ground_truth", "")),
+                        contexts=contexts[: runtime.max_context_docs],
+                        abstention_detected=bool(int(row.get("abstention_detected", 0) or 0)),
+                    )
+                )
 
-        def generate_text(self, prompt, n=1, temperature=0.01, stop=None, callbacks=None):
-            text = _generate_batch([self._render(prompt)])[0]
-            if stop:
-                for s in stop:
-                    idx = text.find(s)
-                    if idx != -1:
-                        text = text[:idx]
-            return LLMResult(generations=[[Generation(text=text)] * n])
+            scored_rows = judge.score_rows(judge_rows, batch_size=runtime.judge_batch_size)
+            for idx, scored in zip(chunk_indices, scored_rows):
+                df.loc[idx, "faithfulness_ragas"] = round(float(scored["faithfulness"]), 4)
+                df.loc[idx, "answer_relevancy"] = round(float(scored["answer_relevancy"]), 4)
+                df.loc[idx, "context_precision"] = round(float(scored["context_precision"]), 4)
+                df.loc[idx, "context_recall"] = round(float(scored["context_recall"]), 4)
+                df.loc[idx, "judge_raw_output"] = scored.get("judge_raw_output", "")
+                df.loc[idx, "judge_used_fallback"] = bool(scored.get("judge_used_fallback", False))
 
-        async def agenerate_text(self, prompt, n=1, temperature: float | None = 0.01, stop=None, callbacks=None):
-            # Delegate async calls to the same deterministic single-call path.
-            return self.generate_text(prompt=prompt, n=n, temperature=temperature or 0.01, stop=stop, callbacks=callbacks)
+            df = _write_results(df, questions=questions, metadata=metadata, output_path=output_path)
 
-        def is_finished(self, response) -> bool:
-            return True
-
-    return MistralJudgeLLM()
-
-
-def _build_ragas_embeddings():
-    """Local embedding model for RAGAS — reuses project's BAAI/bge-small-en-v1.5."""
-    from langchain_huggingface import HuggingFaceEmbeddings
-    from ragas.embeddings import LangchainEmbeddingsWrapper
-    return LangchainEmbeddingsWrapper(HuggingFaceEmbeddings(model_name=_EMBED_MODEL_NAME))
+        return df
+    finally:
+        judge.close()
 
 
-def run_model_free_evaluation(llm=None, test_set: list[dict] | None = None) -> pd.DataFrame:
+def run_model_free_evaluation(
+    test_set: list[dict] | None = None,
+    *,
+    llm: Any | None = None,
+    runtime: EvalRuntime | None = None,
+    output_path: Path = OUT_PATH,
+) -> pd.DataFrame:
     rows = _load_test_set(test_set)
-    app = compile_graph()
+    runtime = runtime or resolve_eval_runtime(profile=None, budget_seconds=None, judge_requested=False)
+    if llm is not None:
+        Settings.llm = llm
 
-    ragas_rows: list[dict] = []
-    latencies: list[float] = []
-    retry_counts: list[int] = []
-    nli_faithfulness: list[float] = []
+    questions = [str(row["question"]) for row in rows]
+    metadata = runtime.metadata()
+    expected_run_id = compute_run_id(questions, metadata=metadata)
 
-    unsupported_claims_counts: list[int] = []
-    evidence_scores: list[float] = []
-    citation_counts: list[int] = []
-    corrupted_outputs: list[int] = []
-
-    for row in rows:
-        start = time.perf_counter()
-        result = app.invoke({"query": row["question"], "retry_count": 0})
-        latency = time.perf_counter() - start
-
-        raw_answer = result.get("final_answer", result.get("draft_answer", ""))
-        answer = clean_for_scoring(raw_answer)
-        contexts = [node.get_content() for node in result.get("retrieved_docs", [])]
-        contexts = contexts[:_MAX_CONTEXT_DOCS]
-
-        # Extract safety metrics from state
-        unsupported_count = result.get("unsupported_claims_count", 0)
-        citation_count = raw_answer.count("[") if "[" in raw_answer else 0
-        retrieved_docs = result.get("retrieved_docs", [])
-        evidence_score = 0.0
-        if retrieved_docs:
-            top_doc = retrieved_docs[0]
-            evidence_score = float(getattr(top_doc, "score", 0.0) or 0.0)
-
-        ragas_rows.append({
-            "user_input": row["question"],
-            "response": answer,
-            "retrieved_contexts": contexts if contexts else [""],
-            "reference": row["ground_truth"],
-        })
-        latencies.append(round(latency, 4))
-        retry_counts.append(result.get("retry_count", 0))
-        nli_faithfulness.append(round(result.get("faithfulness_score", 0.0), 4))
-        unsupported_claims_counts.append(unsupported_count)
-        evidence_scores.append(evidence_score) #type: ignore
-        citation_counts.append(citation_count)
-        corrupted_outputs.append(1 if is_corrupted_output(raw_answer) else 0)
-
-    # Always build a normalized base frame so downstream evaluators can reuse predictions.
-    df = pd.DataFrame(
-        {
-            "question": [r["user_input"] for r in ragas_rows],
-            "answer": [r["response"] for r in ragas_rows],
-            "ground_truth": [r["reference"] for r in ragas_rows],
-            "faithfulness": nli_faithfulness,
-            "faithfulness_nli": nli_faithfulness,
-            "faithfulness_ragas": [None] * len(ragas_rows),
-            "answer_relevancy": [None] * len(ragas_rows),
-            "context_precision": [None] * len(ragas_rows),
-            "context_recall": [None] * len(ragas_rows),
-            "latency_per_query_s": latencies,
-            "avg_retries": retry_counts,
-            # New safety metrics
-            "abstention_detected": [1 if is_abstention(r["response"]) else 0 for r in ragas_rows],
-            "unsupported_claims_count": unsupported_claims_counts,
-            "citation_count": citation_counts,
-            "retry_count": retry_counts,
-            "evidence_score": evidence_scores,
-            "corrupted_output_detected": corrupted_outputs,
-        }
+    existing_rows = _load_existing_rows(output_path, expected_run_id)
+    needs_generation = any(
+        question not in existing_rows or not _row_has_base_columns(existing_rows[question])
+        for question in questions
     )
 
-    if llm is not None:
-        ragas_dataset = Dataset.from_list(ragas_rows)
-        from ragas.dataset_schema import EvaluationResult
-        from ragas.run_config import RunConfig
-        scores = evaluate(
-            dataset=ragas_dataset,
-            # Keep NLI faithfulness as default `faithfulness`, but also collect RAGAS faithfulness.
-            metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
-            llm=_build_ragas_llm(llm),
-            embeddings=_build_ragas_embeddings(),
-            run_config=RunConfig(
-                timeout=300,
-                max_retries=1,
-                max_workers=2,
-            ),
-            raise_exceptions=False,  # return NaN for failed rows instead of aborting
-            batch_size=4,
+    if needs_generation:
+        app = compile_graph()
+        records: list[dict[str, Any]] = []
+        for row in tqdm(rows, desc="Graph eval", unit="q", dynamic_ncols=True):
+            question = str(row["question"])
+            existing = existing_rows.get(question)
+            if existing is not None and _row_has_base_columns(existing):
+                records.append(existing)
+                continue
+
+            start = time.perf_counter()
+            result = app.invoke({"query": question, "retry_count": 0})
+            latency = time.perf_counter() - start
+            records.append(
+                _build_base_record(
+                    question=question,
+                    ground_truth=str(row["ground_truth"]),
+                    result=result,
+                    latency_s=latency,
+                    max_context_docs=runtime.max_context_docs,
+                )
+            )
+
+            if len(records) % runtime.checkpoint_every_rows == 0:
+                _write_results(pd.DataFrame(records), questions=questions, metadata=metadata, output_path=output_path)
+
+        df = pd.DataFrame(records)
+    else:
+        df = pd.DataFrame([existing_rows[question] for question in questions])
+
+    df = _write_results(df, questions=questions, metadata=metadata, output_path=output_path)
+
+    _release_graph_resources()
+
+    if runtime.judge_enabled:
+        df = _score_with_judge(
+            df,
+            runtime,
+            questions=questions,
+            metadata=metadata,
+            output_path=output_path,
         )
-        assert isinstance(scores, EvaluationResult)
-        ragas_df = scores.to_pandas()
+        df = _write_results(df, questions=questions, metadata=metadata, output_path=output_path)
 
-        # Copy judged metrics into the normalized output by row order.
-        for col in ["answer_relevancy", "context_precision", "context_recall"]:
-            if col in ragas_df.columns:
-                vals = ragas_df[col].tolist()
-                n = min(len(vals), len(df))
-                df.loc[: n - 1, col] = vals[:n]
-
-        # Keep RAGAS faithfulness separate if present; do not overwrite NLI faithfulness.
-        if "faithfulness" in ragas_df.columns:
-            vals = ragas_df["faithfulness"].tolist()
-            n = min(len(vals), len(df))
-            df.loc[: n - 1, "faithfulness_ragas"] = vals[:n]
-
-    df = annotate_with_run_metadata(df, [r["user_input"] for r in ragas_rows])
-
-    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(OUT_PATH, index=False)
-    df.to_csv(Path("experiments/ragas_results.csv"), index=False)
     return df

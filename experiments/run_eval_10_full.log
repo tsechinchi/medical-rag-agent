@@ -1,8 +1,0 @@
-nohup: ignoring input
-Using 10 questions (--n_samples 10)
-Running model-free evaluation...
-Running BERTScore evaluation...
-Merging evaluation outputs...
-Merging ablations:   0%|          | 0/4 [00:00<?, ?file/s]Merging ablations: 100%|██████████| 4/4 [00:00<00:00, 624.85file/s]
-Unified results saved to experiments/all_results.csv  (5 variants)
-Evaluation pipeline complete.

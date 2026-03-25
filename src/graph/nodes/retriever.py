@@ -68,6 +68,13 @@ def _get_reranker():
     return _reranker
 
 
+def clear_retriever_cache() -> None:
+    """Release cached retriever/reranker singletons."""
+    global _retriever, _reranker
+    _retriever = None
+    _reranker = None
+
+
 def _deduplicate(nodes: list[NodeWithScore]) -> list[NodeWithScore]:
     """Keep the highest-scoring occurrence of each node_id."""
     seen: dict[str, NodeWithScore] = {}

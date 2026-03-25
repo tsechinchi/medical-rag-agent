@@ -269,3 +269,8 @@ def _load_model_and_tokenizer_cached(
     model.eval()
 
     return LoadedModel(model=model, tokenizer=tokenizer)
+
+
+def clear_model_cache() -> None:
+    """Release the cached generation model/tokenizer pair."""
+    _load_model_and_tokenizer_cached.cache_clear()

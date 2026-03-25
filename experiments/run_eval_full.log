@@ -1,61 +1,0 @@
-nohup: ignoring input
-Using 20 questions (--n_samples 20)
-Running model-free evaluation...
-RAGAS LLM-judge metrics enabled (--with-ragas-judge).
-Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)
-Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:03<00:03,  3.94s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:06<00:00,  2.92s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:06<00:00,  3.08s/it]
-Evaluating:   0%|          | 0/80 [00:00<?, ?it/s]
-Batch 1/20:   0%|          | 0/4 [00:00<?, ?it/s][A
-Batch 1/20:   0%|          | 0/4 [00:00<?, ?it/s][A
-Batch 1/20:   0%|          | 0/4 [00:00<?, ?it/s][A/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/transformers/generation/configuration_utils.py:601: UserWarning: `do_sample` is set to `False`. However, `temperature` is set to `0.7` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`.
-  warnings.warn(
-/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/transformers/generation/configuration_utils.py:606: UserWarning: `do_sample` is set to `False`. However, `top_p` is set to `0.8` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_p`.
-  warnings.warn(
-/home/zeus/miniconda3/envs/cloudspace/lib/python3.12/site-packages/transformers/generation/configuration_utils.py:623: UserWarning: `do_sample` is set to `False`. However, `top_k` is set to `20` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `top_k`.
-  warnings.warn(
-Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)
-
-Batch 1/20:  25%|██▌       | 1/4 [00:52<02:37, 52.48s/it][AEvaluating:   5%|▌         | 4/80 [00:52<16:37, 13.12s/it]
-Batch 1/20:   0%|          | 0/4 [00:00<?, ?it/s]        [A
-Batch 2/20:   0%|          | 0/4 [00:00<?, ?it/s][A
-Batch 2/20:  25%|██▌       | 1/4 [00:56<02:50, 56.96s/it][AEvaluating:  10%|█         | 8/80 [01:49<16:32, 13.78s/it]
-Batch 2/20:   0%|          | 0/4 [00:00<?, ?it/s]        [A
-Batch 3/20:   0%|          | 0/4 [00:00<?, ?it/s][A
-Batch 3/20:  25%|██▌       | 1/4 [01:07<03:23, 67.93s/it][AEvaluating:  15%|█▌        | 12/80 [02:57<17:16, 15.24s/it]
-Batch 3/20:   0%|          | 0/4 [00:00<?, ?it/s]        [A
-Batch 4/20:   0%|          | 0/4 [00:00<?, ?it/s][A
-Batch 4/20:  25%|██▌       | 1/4 [00:54<02:43, 54.56s/it][AEvaluating:  20%|██        | 16/80 [03:51<15:35, 14.61s/it]
-Batch 4/20:   0%|          | 0/4 [00:00<?, ?it/s]        [A
-Batch 5/20:   0%|          | 0/4 [00:00<?, ?it/s][A
-Batch 5/20:  25%|██▌       | 1/4 [01:10<03:31, 70.48s/it][AEvaluating:  25%|██▌       | 20/80 [05:02<15:41, 15.70s/it]
-Batch 5/20:   0%|          | 0/4 [00:00<?, ?it/s]        [A
-Batch 6/20:   0%|          | 0/4 [00:00<?, ?it/s][AException raised in Job[20]: OutputParserException(Failed to parse StringIO from completion "statements". Got: 1 validation error for StringIO
-  Input should be a valid dictionary or instance of StringIO [type=model_type, input_value='statements', input_type=str]
-    For further information visit https://errors.pydantic.dev/2.12/v/model_type
-For troubleshooting, visit: https://docs.langchain.com/oss/python/langchain/errors/OUTPUT_PARSING_FAILURE )
-
-Batch 6/20:  25%|██▌       | 1/4 [01:00<03:01, 60.46s/it][AEvaluating:  30%|███       | 24/80 [06:02<14:27, 15.50s/it]
-Batch 6/20:   0%|          | 0/4 [00:00<?, ?it/s]        [A
-Batch 7/20:   0%|          | 0/4 [00:00<?, ?it/s][A
-Batch 7/20:  25%|██▌       | 1/4 [00:50<02:31, 50.43s/it][AEvaluating:  35%|███▌      | 28/80 [06:53<12:36, 14.55s/it]
-Batch 7/20:   0%|          | 0/4 [00:00<?, ?it/s]        [A
-Batch 8/20:   0%|          | 0/4 [00:00<?, ?it/s][A
-Batch 8/20:  25%|██▌       | 1/4 [00:44<02:12, 44.33s/it][AEvaluating:  40%|████      | 32/80 [07:37<10:45, 13.45s/it]
-Batch 8/20:   0%|          | 0/4 [00:00<?, ?it/s]        [A
-Batch 9/20:   0%|          | 0/4 [00:00<?, ?it/s][A
-Batch 9/20:  25%|██▌       | 1/4 [00:46<02:18, 46.26s/it][AEvaluating:  45%|████▌     | 36/80 [08:23<09:25, 12.86s/it]
-Batch 9/20:   0%|          | 0/4 [00:00<?, ?it/s]        [A
-Batch 10/20:   0%|          | 0/4 [00:00<?, ?it/s][AException raised in Job[36]: OutputParserException(Failed to parse StringIO from completion "{\"statements\": [{\"The available evidence does not directly address pertrochanteric fractures.\"}]}". Got: 1 validation error for StringIO
-  Input should be a valid dictionary or instance of StringIO [type=model_type, input_value='{"statements": [{"The av...hanteric fractures."}]}', input_type=str]
-    For further information visit https://errors.pydantic.dev/2.12/v/model_type
-For troubleshooting, visit: https://docs.langchain.com/oss/python/langchain/errors/OUTPUT_PARSING_FAILURE )
-
-Batch 10/20:  25%|██▌       | 1/4 [01:04<03:14, 64.90s/it][AEvaluating:  50%|█████     | 40/80 [09:28<09:15, 13.90s/it]
-Batch 10/20:   0%|          | 0/4 [00:00<?, ?it/s]        [A
-Batch 11/20:   0%|          | 0/4 [00:00<?, ?it/s][A
-Batch 11/20:  25%|██▌       | 1/4 [00:54<02:42, 54.15s/it][AEvaluating:  55%|█████▌    | 44/80 [10:22<08:16, 13.79s/it]
-Batch 11/20:   0%|          | 0/4 [00:00<?, ?it/s]        [A
-Batch 12/20:   0%|          | 0/4 [00:00<?, ?it/s][A
-Batch 12/20:  25%|██▌       | 1/4 [00:54<02:43, 54.57s/it][AEvaluating:  60%|██████    | 48/80 [11:17<07:19, 13.74s/it]
-Batch 12/20:   0%|          | 0/4 [00:00<?, ?it/s]        [A
-Batch 13/20:   0%|          | 0/4 [00:00<?, ?it/s][A

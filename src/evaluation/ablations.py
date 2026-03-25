@@ -21,25 +21,46 @@ if str(_ROOT) not in _sys.path:
 
 import argparse
 import json
-import time
 from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
 from bert_score import score as bert_score_fn
+import torch
 from tqdm import tqdm
 
 from config import config as app_config
+from src.evaluation.runtime import EvalRuntime, resolve_eval_runtime
+from src.utils.answer_cleaning import clean_for_scoring
 from src.model.llm_wrapper import QuantizedHFLLM, register_llm
 from src.model.loader import load_model_and_tokenizer
 from src.utils.seed import set_seed
 
 TEST_SET_PATH = Path("data/eval/test_set.json")
-BERTSCORE_MODEL = "microsoft/deberta-xlarge-mnli"
+ABLATION_RUNTIME = resolve_eval_runtime(profile="fast", budget_seconds=None, judge_requested=False)
+
+
+def _resolve_bertscore_device() -> str:
+    configured = str(getattr(app_config, "BERTSCORE_DEVICE", "auto")).lower()
+    if configured == "auto":
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    if configured in {"cuda", "cpu"}:
+        if configured == "cuda" and not torch.cuda.is_available():
+            return "cpu"
+        return configured
+    return "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def _load_test_set() -> list[dict]:
     return json.loads(TEST_SET_PATH.read_text())
+
+
+def _write_ablation_results(df: pd.DataFrame, filename: str, label: str) -> pd.DataFrame:
+    out = Path("experiments") / filename
+    out.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out, index=False)
+    print(f"{label} saved to {out}")
+    return df
 
 
 def _run_pipeline(graph_app, test_set: list[dict], desc: str = "Running pipeline") -> tuple[list[str], list[str], list[str], list[dict]]:
@@ -57,17 +78,38 @@ def _run_pipeline(graph_app, test_set: list[dict], desc: str = "Running pipeline
 
 
 def _compute_bertscore(preds: list[str], refs: list[str]) -> list[float]:
-    _, _, F1 = bert_score_fn(preds, refs, model_type=BERTSCORE_MODEL, verbose=False, device="cpu")
+    cleaned_preds = [clean_for_scoring(pred) for pred in preds]
+    cleaned_refs = [clean_for_scoring(ref) for ref in refs]
+    _, _, F1 = bert_score_fn(
+        cleaned_preds,
+        cleaned_refs,
+        model_type=ABLATION_RUNTIME.bertscore_model_type,
+        verbose=False,
+        device=_resolve_bertscore_device(),
+        batch_size=ABLATION_RUNTIME.bertscore_batch_size,
+    )
     return F1.tolist()
 
 
-def _build_and_register_llm(*, finetuned: bool = False) -> QuantizedHFLLM:
+def _ablation_frame(questions: list[str], preds: list[str], refs: list[str]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "question": questions,
+            "prediction": preds,
+            "reference": refs,
+            "bertscore_f1": _compute_bertscore(preds, refs),
+        }
+    )
+
+
+def _build_and_register_llm(*, finetuned: bool = False, runtime: EvalRuntime | None = None) -> QuantizedHFLLM:
+    runtime = runtime or ABLATION_RUNTIME
     loaded = load_model_and_tokenizer(finetuned=finetuned)
     llm = QuantizedHFLLM(
         model=loaded.model,
         tokenizer=loaded.tokenizer,
-        max_new_tokens=getattr(app_config, "GENERATION_MAX_NEW_TOKENS", None),
-        min_new_tokens=getattr(app_config, "GENERATION_MIN_NEW_TOKENS", 16),
+        max_new_tokens=runtime.generation_max_new_tokens,
+        min_new_tokens=runtime.generation_min_new_tokens,
         temperature=getattr(app_config, "GENERATION_TEMPERATURE", 0.0),
         context_window=getattr(app_config, "INFERENCE_CONTEXT_WINDOW", 2048),
         do_sample=False,
@@ -80,26 +122,12 @@ def _build_and_register_llm(*, finetuned: bool = False) -> QuantizedHFLLM:
     return llm
 
 
-def _summary_row(
-    variant: str,
-    questions: list[str],
-    preds: list[str],
-    refs: list[str],
-    raw: list[dict],
-    elapsed: float,
-) -> dict:
-    f1_scores = _compute_bertscore(preds, refs)
-    avg_retries = sum(r.get("retry_count", 0) for r in raw) / max(len(raw), 1)
-    avg_chunks = sum(len(r.get("retrieved_docs", [])) for r in raw) / max(len(raw), 1)
-    return {
-        "variant": variant,
-        "n_questions": len(questions),
-        "bertscore_f1_mean": round(sum(f1_scores) / max(len(f1_scores), 1), 4),
-        "avg_retries": round(avg_retries, 2),
-        "avg_chunks": round(avg_chunks, 2),
-        "latency_per_query_s": round(elapsed / max(len(questions), 1), 2),
-        "total_time_s": round(elapsed, 1),
-    }
+def _merge_qlora_results(ragas_df: pd.DataFrame, bert_df: pd.DataFrame) -> pd.DataFrame:
+    merge_cols = [col for col in ["question", "run_id", "bertscore_f1"] if col in bert_df.columns]
+    if "run_id" in ragas_df.columns and "run_id" in bert_df.columns and len(merge_cols) >= 3:
+        return ragas_df.merge(bert_df[merge_cols], on=["question", "run_id"], how="left")
+    fallback_cols = [col for col in ["question", "bertscore_f1"] if col in bert_df.columns]
+    return ragas_df.merge(bert_df[fallback_cols], on="question", how="left")
 
 
 # ── Ablation A: No retry loop ───────────────────────────────────────────
@@ -114,21 +142,12 @@ def ablation_no_loop(test_set: list[dict] | None = None) -> pd.DataFrame:
         from src.graph.graph import compile_graph
         app = compile_graph()
 
-    t0 = time.time()
-    questions, preds, refs, raw = _run_pipeline(app, test_set, desc="Ablation A (no loop)")
-    elapsed = time.time() - t0
-
-    df = pd.DataFrame({
-        "question": questions,
-        "prediction": preds,
-        "reference": refs,
-        "bertscore_f1": _compute_bertscore(preds, refs),
-    })
-    out = Path("experiments/ablation_no_loop.csv")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out, index=False)
-    print(f"Ablation A saved to {out}")
-    return df
+    questions, preds, refs, _ = _run_pipeline(app, test_set, desc="Ablation A (no loop)")
+    return _write_ablation_results(
+        _ablation_frame(questions, preds, refs),
+        "ablation_no_loop.csv",
+        "Ablation A",
+    )
 
 
 # ── Ablation B: Dense-only retrieval (no BM25) ──────────────────────────
@@ -160,21 +179,12 @@ def ablation_dense_only(test_set: list[dict] | None = None) -> pd.DataFrame:
         from src.graph.graph import compile_graph
         app = compile_graph()
 
-    t0 = time.time()
-    questions, preds, refs, raw = _run_pipeline(app, test_set, desc="Ablation B (dense only)")
-    elapsed = time.time() - t0
-
-    df = pd.DataFrame({
-        "question": questions,
-        "prediction": preds,
-        "reference": refs,
-        "bertscore_f1": _compute_bertscore(preds, refs),
-    })
-    out = Path("experiments/ablation_dense_only.csv")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out, index=False)
-    print(f"Ablation B saved to {out}")
-    return df
+    questions, preds, refs, _ = _run_pipeline(app, test_set, desc="Ablation B (dense only)")
+    return _write_ablation_results(
+        _ablation_frame(questions, preds, refs),
+        "ablation_dense_only.csv",
+        "Ablation B",
+    )
 
 
 # ── Ablation C: No reranker ─────────────────────────────────────────────
@@ -203,21 +213,12 @@ def ablation_no_rerank(test_set: list[dict] | None = None) -> pd.DataFrame:
         from src.graph.graph import compile_graph
         app = compile_graph()
 
-    t0 = time.time()
-    questions, preds, refs, raw = _run_pipeline(app, test_set, desc="Ablation C (no rerank)")
-    elapsed = time.time() - t0
-
-    df = pd.DataFrame({
-        "question": questions,
-        "prediction": preds,
-        "reference": refs,
-        "bertscore_f1": _compute_bertscore(preds, refs),
-    })
-    out = Path("experiments/ablation_no_rerank.csv")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out, index=False)
-    print(f"Ablation C saved to {out}")
-    return df
+    questions, preds, refs, _ = _run_pipeline(app, test_set, desc="Ablation C (no rerank)")
+    return _write_ablation_results(
+        _ablation_frame(questions, preds, refs),
+        "ablation_no_rerank.csv",
+        "Ablation C",
+    )
 
 
 # ── Ablation D: Fine-tuned QLoRA model ──────────────────────────────────
@@ -227,7 +228,8 @@ def ablation_qlora(test_set: list[dict] | None = None) -> pd.DataFrame:
     if test_set is None:
         test_set = _load_test_set()
 
-    llm = _build_and_register_llm(finetuned=True)
+    runtime = ABLATION_RUNTIME
+    llm = _build_and_register_llm(finetuned=True, runtime=runtime)
 
     try:
         from src.evaluation.bertscore_eval import run_bertscore_evaluation
@@ -238,22 +240,9 @@ def ablation_qlora(test_set: list[dict] | None = None) -> pd.DataFrame:
             "src.evaluation.bertscore_eval to be available in the workspace."
         ) from exc
 
-    ragas_df = run_model_free_evaluation(llm=llm, test_set=test_set)
-    bert_df = run_bertscore_evaluation(test_set=test_set)
-
-    if "prediction" in bert_df.columns and "answer" not in bert_df.columns:
-        bert_df = bert_df.rename(columns={"prediction": "answer"})
-    if "reference" in bert_df.columns and "ground_truth" not in bert_df.columns:
-        bert_df = bert_df.rename(columns={"reference": "ground_truth"})
-
-    merge_cols = [col for col in ["question", "bertscore_f1"] if col in bert_df.columns]
-    merged = ragas_df.merge(bert_df[merge_cols], on="question", how="left")
-
-    out = Path("experiments/ablation_qlora.csv")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    merged.to_csv(out, index=False)
-    print(f"Ablation D saved to {out}")
-    return merged
+    ragas_df = run_model_free_evaluation(llm=llm, test_set=test_set, runtime=runtime)
+    bert_df = run_bertscore_evaluation(test_set=test_set, runtime=runtime)
+    return _write_ablation_results(_merge_qlora_results(ragas_df, bert_df), "ablation_qlora.csv", "Ablation D")
 
 
 # ── Entry point ──────────────────────────────────────────────────────────

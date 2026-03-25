@@ -36,10 +36,13 @@ uv run python src/data/download.py
 uv run python src/data/preprocess.py
 uv run python src/data/build_indices.py
 uv run python -m src.evaluation.build_test_set
-uv run python -m src.evaluation.run_eval
+uv run python -m src.evaluation.run_eval --profile auto --budget-seconds 10800 --with-ragas-judge
 uv run python -m src.evaluation.plot_results
 uv run streamlit run src/app.py # skip eval if not needed
 ```
+
+## Tests
+python3.11 -m unittest discover -s tests
 
 ## Configuration
 
@@ -58,8 +61,8 @@ Inference defaults in `config/config.py` are intentionally light so the project 
 
 Single-GPU runtime target:
 
-- Keep `--with-ragas-judge` disabled for standard runs.
-- Use `BERTSCORE_BATCH_SIZE=8` and `--n_samples 200` max per run.
+- Use `--profile auto --budget-seconds 10800 --with-ragas-judge` for the full T4-budgeted eval run.
+- Use `--profile fast` for smoke tests and `--profile t4-tight` when you want the leanest judge path.
 - The notebook smoke test uses `--skip-bertscore` so the first successful run is fast.
 - The first full model load populates `models/biomistral-7b/`, and later runs reuse that local snapshot.
 
