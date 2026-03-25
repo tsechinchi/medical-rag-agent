@@ -27,7 +27,7 @@ export HUGGINGFACE_HUB_TOKEN="<your_token>"
 $env:HUGGINGFACE_HUB_TOKEN="<your_token>"
 ```
 
-For notebook-based setup, open [`notebooks/00_quick_start.ipynb`](./notebooks/00_quick_start.ipynb). It walks through cloning the repo, authenticating, syncing dependencies with `uv`, downloading the model once, and running a smoke test.
+For notebook-based setup, open [`notebooks/00_quick_start.ipynb`](./notebooks/00_quick_start.ipynb). It walks through cloning the repo, authenticating, syncing dependencies with `uv`, running a fast smoke test, and then stepping up to the budgeted evaluation flow.
 
 ## Pipeline
 
@@ -36,13 +36,16 @@ uv run python src/data/download.py
 uv run python src/data/preprocess.py
 uv run python src/data/build_indices.py
 uv run python -m src.evaluation.build_test_set
+uv run python -m src.evaluation.run_eval --n_samples 10 --profile fast --skip-bertscore # quick smoke test
 uv run python -m src.evaluation.run_eval --profile auto --budget-seconds 10800 --with-ragas-judge
 uv run python -m src.evaluation.plot_results
 uv run streamlit run src/app.py # skip eval if not needed
 ```
 
 ## Tests
+```bash
 python3.11 -m unittest discover -s tests
+```
 
 ## Configuration
 
@@ -62,8 +65,9 @@ Inference defaults in `config/config.py` are intentionally light so the project 
 Single-GPU runtime target:
 
 - Use `--profile auto --budget-seconds 10800 --with-ragas-judge` for the full T4-budgeted eval run.
-- Use `--profile fast` for smoke tests and `--profile t4-tight` when you want the leanest judge path.
-- The notebook smoke test uses `--skip-bertscore` so the first successful run is fast.
+- Use `--profile fast --n_samples 10 --skip-bertscore` for the quickest smoke test.
+- Use `--profile t4-tight --with-ragas-judge` when you want the leanest judge path on a single T4.
+- The notebook starts with the fast smoke test first, then shows the longer full-eval command separately.
 - The first full model load populates `models/biomistral-7b/`, and later runs reuse that local snapshot.
 
 Override `INFERENCE_MODEL_ID` and `INFERENCE_REVISION` to test alternative models.
@@ -87,6 +91,12 @@ Quick test run:
 
 ```bash
 uv run python -m src.evaluation.ablations --only D --n_samples 10
+```
+
+Fast local eval loop:
+
+```bash
+uv run python -m src.evaluation.run_eval --n_samples 10 --profile fast --skip-bertscore
 ```
 
 ## Safety-First Architecture
