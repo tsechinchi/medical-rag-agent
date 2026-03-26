@@ -114,28 +114,57 @@ def _plot_bertscore_distribution(model_free: pd.DataFrame, bert: pd.DataFrame) -
 
 def _plot_loop_iterations(model_free: pd.DataFrame, summary: pd.DataFrame) -> None:
     fig, ax = plt.subplots(figsize=(6, 4))
-    retry_col = "avg_retries" if "avg_retries" in model_free.columns else "retry_count" if "retry_count" in model_free.columns else None
-
-    if retry_col is not None:
-        retry_values = pd.to_numeric(model_free[retry_col], errors="coerce").dropna()
-        if not retry_values.empty:
-            ax.hist(retry_values, bins=max(int(retry_values.max()) + 3, 1), align="left")
-            ax.set_title("Loop Iteration Histogram")
-            ax.set_xlabel("Retries")
-            ax.set_ylabel("Count")
-            fig.savefig(FIGURES / "loop_iterations.png", bbox_inches="tight")
-            plt.close(fig)
-            return
-
     frame = _summary_metric_frame(summary, ["avg_retries"])
     if not frame.empty:
-        ax.bar(frame["variant"], frame["avg_retries"])
+        frame = frame.sort_values("variant")
+        bars = ax.bar(frame["variant"], frame["avg_retries"], color="#4C72B0")
+        for bar, value in zip(bars, frame["avg_retries"].tolist()):
+            ax.annotate(
+                f"{value:.1f}",
+                (bar.get_x() + bar.get_width() / 2, max(bar.get_height(), 0.0)),
+                ha="center",
+                va="bottom",
+                fontsize=9,
+                xytext=(0, 3),
+                textcoords="offset points",
+            )
         ax.set_title("Average Retries by Variant")
         ax.set_xlabel("Variant")
         ax.set_ylabel("Average Retries")
+        ax.set_ylim(0, max(0.1, float(frame["avg_retries"].max()) + 0.1))
+        ax.axhline(0, color="black", linewidth=0.8)
+        ax.grid(axis="y", linestyle="--", alpha=0.3)
         plt.xticks(rotation=20, ha="right")
     else:
-        ax.set_title("Average Retries by Variant")
+        retry_col = "avg_retries" if "avg_retries" in model_free.columns else "retry_count" if "retry_count" in model_free.columns else None
+        if retry_col is not None:
+            retry_values = pd.to_numeric(model_free[retry_col], errors="coerce").dropna()
+            if not retry_values.empty:
+                buckets = {
+                    "0": int((retry_values == 0).sum()),
+                    "1": int((retry_values == 1).sum()),
+                    "2+": int((retry_values >= 2).sum()),
+                }
+                bars = ax.bar(buckets.keys(), buckets.values(), color="#4C72B0")
+                for bar, value in zip(bars, buckets.values()):
+                    ax.annotate(
+                        str(value),
+                        (bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                        ha="center",
+                        va="bottom",
+                        fontsize=9,
+                        xytext=(0, 3),
+                        textcoords="offset points",
+                    )
+                ax.set_ylabel("Count")
+                ax.set_xlabel("Retries")
+                ax.set_title("Retry Count Distribution")
+                ax.set_ylim(0, max(1, max(buckets.values()) + 1))
+                ax.grid(axis="y", linestyle="--", alpha=0.3)
+            else:
+                ax.set_title("Average Retries by Variant")
+        else:
+            ax.set_title("Average Retries by Variant")
     fig.savefig(FIGURES / "loop_iterations.png", bbox_inches="tight")
     plt.close(fig)
 
