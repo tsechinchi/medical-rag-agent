@@ -5,11 +5,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from src.evaluation.result_utils import abstention_mask, align_eval_frames, load_csv_if_exists, safe_mean
+from src.evaluation.result_utils import abstention_mask, align_eval_frames, load_csv_if_exists
 
 
 EXPERIMENTS = Path("experiments")
 FIGURES = Path("docs/figures")
+ALL_RESULTS = EXPERIMENTS / "all_results.csv"
 
 
 def _load_model_free_df() -> pd.DataFrame:
@@ -24,15 +25,8 @@ def _load_bert_df() -> pd.DataFrame:
     return load_csv_if_exists(EXPERIMENTS / "bertscore_results.csv")
 
 
-def _faithfulness_metric(df: pd.DataFrame) -> float | None:
-    if df.empty:
-        return None
-    for column in ("faithfulness_ragas", "faithfulness_nli", "faithfulness"):
-        if column in df.columns:
-            value = safe_mean(df, column)
-            if value is not None:
-                return value
-    return None
+def _load_summary_df() -> pd.DataFrame:
+    return load_csv_if_exists(ALL_RESULTS)
 
 
 def _resolve_bert_plot_source(model_free: pd.DataFrame, bert: pd.DataFrame, merged: pd.DataFrame) -> pd.DataFrame:
@@ -47,73 +41,119 @@ def _resolve_bert_plot_source(model_free: pd.DataFrame, bert: pd.DataFrame, merg
     return merged
 
 
+def _summary_metric_frame(summary: pd.DataFrame, metrics: list[str]) -> pd.DataFrame:
+    if summary.empty or "variant" not in summary.columns:
+        return pd.DataFrame()
+
+    available = [metric for metric in metrics if metric in summary.columns]
+    if not available:
+        return pd.DataFrame()
+
+    frame = summary[["variant", *available]].copy()
+    for metric in available:
+        frame[metric] = pd.to_numeric(frame[metric], errors="coerce")
+    frame = frame.dropna(subset=available, how="all")
+    return frame
+
+
+def _plot_quality_metrics(summary: pd.DataFrame) -> None:
+    metrics = ["faithfulness_ragas", "answer_relevancy", "context_precision", "context_recall"]
+    frame = _summary_metric_frame(summary, metrics)
+    if frame.empty:
+        print("Warning: skipping quality metrics plot because all_results.csv has no usable summary metrics.")
+        return
+
+    frame = frame.set_index("variant")
+    ax = frame.plot(kind="bar", figsize=(9, 5))
+    ax.set_title("Quality Metrics by Variant")
+    ax.set_xlabel("Variant")
+    ax.set_ylabel("Score")
+    ax.set_ylim(0, 1)
+    ax.legend(title="Metric")
+    plt.xticks(rotation=20, ha="right")
+    plt.tight_layout()
+    plt.savefig(FIGURES / "ragas_radar.png", bbox_inches="tight")
+    plt.close()
+
+
+def _plot_context_precision(summary: pd.DataFrame) -> None:
+    frame = _summary_metric_frame(summary, ["context_precision"])
+    if frame.empty:
+        print("Warning: skipping context precision plot because all_results.csv has no context_precision values.")
+        return
+
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    ax.bar(frame["variant"], frame["context_precision"])
+    ax.set_title("Context Precision by Variant")
+    ax.set_xlabel("Variant")
+    ax.set_ylabel("Context Precision")
+    ax.set_ylim(0, 1)
+    plt.xticks(rotation=20, ha="right")
+    plt.tight_layout()
+    fig.savefig(FIGURES / "precision_at_k.png", bbox_inches="tight")
+    plt.close(fig)
+
+
+def _plot_bertscore_distribution(model_free: pd.DataFrame, bert: pd.DataFrame) -> None:
+    merged = align_eval_frames(model_free, bert)
+    bert_source = _resolve_bert_plot_source(model_free, bert, merged)
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    if not bert_source.empty and "bertscore_f1" in bert_source.columns:
+        if "abstention_detected" in bert_source.columns:
+            bert_source = bert_source[abstention_mask(bert_source)]
+        scores = pd.to_numeric(bert_source["bertscore_f1"], errors="coerce").dropna()
+        if not scores.empty:
+            ax.hist(scores, bins=10)
+    ax.set_title("BERTScore Distribution (Non-Abstentions)")
+    ax.set_xlabel("BERTScore F1")
+    ax.set_ylabel("Count")
+    fig.savefig(FIGURES / "bertscore_distribution.png", bbox_inches="tight")
+    plt.close(fig)
+
+
+def _plot_loop_iterations(model_free: pd.DataFrame, summary: pd.DataFrame) -> None:
+    fig, ax = plt.subplots(figsize=(6, 4))
+    retry_col = "avg_retries" if "avg_retries" in model_free.columns else "retry_count" if "retry_count" in model_free.columns else None
+
+    if retry_col is not None:
+        retry_values = pd.to_numeric(model_free[retry_col], errors="coerce").dropna()
+        if not retry_values.empty:
+            ax.hist(retry_values, bins=max(int(retry_values.max()) + 3, 1), align="left")
+            ax.set_title("Loop Iteration Histogram")
+            ax.set_xlabel("Retries")
+            ax.set_ylabel("Count")
+            fig.savefig(FIGURES / "loop_iterations.png", bbox_inches="tight")
+            plt.close(fig)
+            return
+
+    frame = _summary_metric_frame(summary, ["avg_retries"])
+    if not frame.empty:
+        ax.bar(frame["variant"], frame["avg_retries"])
+        ax.set_title("Average Retries by Variant")
+        ax.set_xlabel("Variant")
+        ax.set_ylabel("Average Retries")
+        plt.xticks(rotation=20, ha="right")
+    else:
+        ax.set_title("Average Retries by Variant")
+    fig.savefig(FIGURES / "loop_iterations.png", bbox_inches="tight")
+    plt.close(fig)
+
+
 def plot_results() -> None:
     FIGURES.mkdir(parents=True, exist_ok=True)
 
     model_free = _load_model_free_df()
     bert = _load_bert_df()
-    merged = align_eval_frames(model_free, bert)
+    summary = _load_summary_df()
 
-    if model_free.empty and bert.empty:
+    if model_free.empty and bert.empty and summary.empty:
         raise FileNotFoundError("No evaluation CSVs found in experiments/")
 
-    radar_source = model_free if not model_free.empty else bert
-    metrics = ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
-    metric_values = [
-        _faithfulness_metric(radar_source),
-        safe_mean(radar_source, "answer_relevancy", non_abstention_only=True),
-        safe_mean(radar_source, "context_precision", non_abstention_only=True),
-        safe_mean(radar_source, "context_recall", non_abstention_only=True),
-    ]
-    metric_values = [float(value or 0.0) for value in metric_values]
-    metric_values.append(metric_values[0])
-    angles = [0.0, 1.57, 3.14, 4.71]
-    angles.append(angles[0])
-
-    fig = plt.figure(figsize=(5, 5))
-    ax = fig.add_subplot(111, polar=True)
-    ax.plot(angles, metric_values)
-    ax.fill(angles, metric_values, alpha=0.2)
-    ax.set_xticks(angles[:-1], metrics)
-    ax.set_ylim(0, 1)
-    fig.savefig(FIGURES / "ragas_radar.png", bbox_inches="tight")
-    plt.close(fig)
-
-    fig, ax = plt.subplots(figsize=(6, 4))
-    bert_source = _resolve_bert_plot_source(model_free, bert, merged)
-    if not bert_source.empty and "bertscore_f1" in bert_source.columns:
-        if "abstention_detected" in bert_source.columns:
-            bert_source = bert_source[abstention_mask(bert_source)]
-        ax.hist(pd.to_numeric(bert_source["bertscore_f1"], errors="coerce").dropna(), bins=10)
-    ax.set_title("BERTScore distribution")
-    fig.savefig(FIGURES / "bertscore_distribution.png", bbox_inches="tight")
-    plt.close(fig)
-
-    fig, ax = plt.subplots(figsize=(6, 4))
-    precision = {
-        "@1": float(safe_mean(model_free, "context_precision", non_abstention_only=True) or 0.0),
-        "@3": float((safe_mean(model_free, "context_precision", non_abstention_only=True) or 0.0) * 1.03),
-        "@5": float((safe_mean(model_free, "context_precision", non_abstention_only=True) or 0.0) * 1.05),
-    }
-    precision = {key: min(value, 1.0) for key, value in precision.items()}
-    ax.bar(list(precision.keys()), list(precision.values()))
-    ax.set_ylim(0, 1)
-    ax.set_title("Retrieval precision@k")
-    fig.savefig(FIGURES / "precision_at_k.png", bbox_inches="tight")
-    plt.close(fig)
-
-    fig, ax = plt.subplots(figsize=(6, 4))
-    retry_col = "avg_retries" if "avg_retries" in model_free.columns else "retry_count" if "retry_count" in model_free.columns else None
-    if retry_col is not None:
-        retry_values = pd.to_numeric(model_free[retry_col], errors="coerce").dropna()
-    else:
-        retry_values = pd.Series(dtype=float)
-    if retry_values.empty:
-        retry_values = pd.Series([0.0])
-    ax.hist(retry_values, bins=max(int(retry_values.max()) + 3, 1), align="left")
-    ax.set_title("Loop iteration histogram")
-    fig.savefig(FIGURES / "loop_iterations.png", bbox_inches="tight")
-    plt.close(fig)
+    _plot_quality_metrics(summary)
+    _plot_context_precision(summary)
+    _plot_bertscore_distribution(model_free, bert)
+    _plot_loop_iterations(model_free, summary)
 
 
 if __name__ == "__main__":
