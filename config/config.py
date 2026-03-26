@@ -46,7 +46,7 @@ MIN_CONTEXT_DOCS = 2
 SEED = 42
 
 FAITHFULNESS_THRESHOLD = 0.4
-MAX_RETRIES = 0
+MAX_RETRIES = 1
 
 # Sentence-level entailment floor used by the critic to mark individual claims
 # as unsupported; values below this are considered weak evidence.
