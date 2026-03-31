@@ -7,26 +7,30 @@ Run:
 from __future__ import annotations
 
 import sys as _sys
+from pathlib import Path
 from pathlib import Path as _Path
+
+import pandas as pd
+from tqdm import tqdm
 
 # Ensure project root is on sys.path when executed as a plain script.
 _ROOT = _Path(__file__).resolve().parents[2]
 if str(_ROOT) not in _sys.path:
     _sys.path.insert(0, str(_ROOT))
 
-from pathlib import Path
-
-import pandas as pd
-from tqdm import tqdm
-
-from src.evaluation.result_utils import abstention_mask, align_eval_frames, load_csv_if_exists, safe_mean
-
+from src.evaluation.result_utils import align_eval_frames, load_csv_if_exists, safe_mean
 
 EXPERIMENTS = Path("experiments")
 OUT_PATH = EXPERIMENTS / "all_results.csv"
 MODEL_FREE_PATH = EXPERIMENTS / "model_free_eval_results.csv"
 LEGACY_MODEL_FREE_PATH = EXPERIMENTS / "ragas_results.csv"
 BERT_PATH = EXPERIMENTS / "bertscore_results.csv"
+ABLATION_MAP = {
+    "ablation_no_loop": "ablation_no_loop.csv",
+    "ablation_dense_only": "ablation_dense_only.csv",
+    "ablation_no_rerank": "ablation_no_rerank.csv",
+    "finetuned_pipeline": "ablation_qlora.csv",
+}
 
 
 def _load_model_free_df() -> pd.DataFrame:
@@ -39,6 +43,29 @@ def _load_model_free_df() -> pd.DataFrame:
 
 def _load_bert_df() -> pd.DataFrame:
     return load_csv_if_exists(BERT_PATH)
+
+
+def _existing_source_paths() -> list[Path]:
+    paths = [
+        MODEL_FREE_PATH,
+        LEGACY_MODEL_FREE_PATH,
+        BERT_PATH,
+        *(EXPERIMENTS / fname for fname in ABLATION_MAP.values()),
+    ]
+    return [path for path in paths if path.exists()]
+
+
+def _warn_if_summary_stale() -> None:
+    if not OUT_PATH.exists():
+        return
+
+    summary_mtime = OUT_PATH.stat().st_mtime
+    newer_sources = [path.name for path in _existing_source_paths() if path.stat().st_mtime > summary_mtime]
+    if newer_sources:
+        print(
+            "Warning: experiments/all_results.csv is older than these source files: "
+            + ", ".join(newer_sources)
+        )
 
 
 def _resolve_full_pipeline_frames(model_free_df: pd.DataFrame, bert_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -107,6 +134,7 @@ def _summarize_variant(variant: str, source_df: pd.DataFrame, bert_df: pd.DataFr
 
 
 def merge_results() -> pd.DataFrame:
+    _warn_if_summary_stale()
     rows: list[dict] = []
 
     model_free_df = _load_model_free_df()
@@ -116,17 +144,10 @@ def merge_results() -> pd.DataFrame:
         source_df, aligned_bert_df = _resolve_full_pipeline_frames(model_free_df, bert_df)
         rows.append(_summarize_variant("full_pipeline", source_df, aligned_bert_df))
 
-    ablation_map = {
-        "ablation_no_loop": "ablation_no_loop.csv",
-        "ablation_dense_only": "ablation_dense_only.csv",
-        "ablation_no_rerank": "ablation_no_rerank.csv",
-        "finetuned_pipeline": "ablation_qlora.csv",
-    }
-
-    for variant, fname in tqdm(ablation_map.items(), desc="Merging ablations", unit="file"):
-        p = EXPERIMENTS / fname
-        if p.exists():
-            df = pd.read_csv(p)
+    for variant, fname in tqdm(ABLATION_MAP.items(), desc="Merging ablations", unit="file"):
+        path = EXPERIMENTS / fname
+        if path.exists():
+            df = pd.read_csv(path)
             rows.append(_summarize_variant(variant, df))
 
     df = pd.DataFrame(rows)

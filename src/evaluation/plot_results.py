@@ -5,12 +5,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from src.evaluation.result_utils import abstention_mask, align_eval_frames, load_csv_if_exists
+from src.evaluation.merge_results import merge_results
+from src.evaluation.result_utils import load_csv_if_exists
 
 
 EXPERIMENTS = Path("experiments")
 FIGURES = Path("docs/figures")
-ALL_RESULTS = EXPERIMENTS / "all_results.csv"
 
 
 def _load_model_free_df() -> pd.DataFrame:
@@ -19,26 +19,6 @@ def _load_model_free_df() -> pd.DataFrame:
         if not df.empty:
             return df
     return pd.DataFrame()
-
-
-def _load_bert_df() -> pd.DataFrame:
-    return load_csv_if_exists(EXPERIMENTS / "bertscore_results.csv")
-
-
-def _load_summary_df() -> pd.DataFrame:
-    return load_csv_if_exists(ALL_RESULTS)
-
-
-def _resolve_bert_plot_source(model_free: pd.DataFrame, bert: pd.DataFrame, merged: pd.DataFrame) -> pd.DataFrame:
-    if model_free.empty or bert.empty:
-        return merged if not merged.empty else bert
-    if merged.empty:
-        print(
-            "Warning: skipping BERTScore plot because the model-free and BERTScore "
-            "runs do not share the same run fingerprint."
-        )
-        return pd.DataFrame()
-    return merged
 
 
 def _summary_metric_frame(summary: pd.DataFrame, metrics: list[str]) -> pd.DataFrame:
@@ -94,20 +74,26 @@ def _plot_context_precision(summary: pd.DataFrame) -> None:
     plt.close(fig)
 
 
-def _plot_bertscore_distribution(model_free: pd.DataFrame, bert: pd.DataFrame) -> None:
-    merged = align_eval_frames(model_free, bert)
-    bert_source = _resolve_bert_plot_source(model_free, bert, merged)
+def _plot_bertscore_distribution(summary: pd.DataFrame) -> None:
+    frame = _summary_metric_frame(summary, ["bertscore_f1_mean", "bertscore_f1_all_mean"])
+    if frame.empty:
+        print("Warning: skipping BERTScore plot because all_results.csv has no usable BERTScore values.")
+        return
 
-    fig, ax = plt.subplots(figsize=(6, 4))
-    if not bert_source.empty and "bertscore_f1" in bert_source.columns:
-        if "abstention_detected" in bert_source.columns:
-            bert_source = bert_source[abstention_mask(bert_source)]
-        scores = pd.to_numeric(bert_source["bertscore_f1"], errors="coerce").dropna()
-        if not scores.empty:
-            ax.hist(scores, bins=10)
-    ax.set_title("BERTScore Distribution (Non-Abstentions)")
-    ax.set_xlabel("BERTScore F1")
-    ax.set_ylabel("Count")
+    frame["bertscore_f1_display"] = frame["bertscore_f1_mean"].combine_first(frame["bertscore_f1_all_mean"])
+    frame = frame.dropna(subset=["bertscore_f1_display"])
+    if frame.empty:
+        print("Warning: skipping BERTScore plot because all_results.csv has no usable BERTScore values.")
+        return
+
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    ax.bar(frame["variant"], frame["bertscore_f1_display"], color="#4C72B0")
+    ax.set_title("Average BERTScore F1 by Variant")
+    ax.set_xlabel("Variant")
+    ax.set_ylabel("BERTScore F1")
+    ax.set_ylim(0, 1)
+    plt.xticks(rotation=20, ha="right")
+    plt.tight_layout()
     fig.savefig(FIGURES / "bertscore_distribution.png", bbox_inches="tight")
     plt.close(fig)
 
@@ -173,15 +159,14 @@ def plot_results() -> None:
     FIGURES.mkdir(parents=True, exist_ok=True)
 
     model_free = _load_model_free_df()
-    bert = _load_bert_df()
-    summary = _load_summary_df()
+    summary = merge_results()
 
-    if model_free.empty and bert.empty and summary.empty:
+    if model_free.empty and summary.empty:
         raise FileNotFoundError("No evaluation CSVs found in experiments/")
 
     _plot_quality_metrics(summary)
     _plot_context_precision(summary)
-    _plot_bertscore_distribution(model_free, bert)
+    _plot_bertscore_distribution(summary)
     _plot_loop_iterations(model_free, summary)
 
 
