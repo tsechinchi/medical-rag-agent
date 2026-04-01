@@ -51,6 +51,17 @@ def _index_fingerprint() -> str:
     return "missing-index"
 
 
+def _runtime_info() -> dict[str, str]:
+    app_path = Path(__file__).resolve()
+    index_fp = _index_fingerprint()
+    return {
+        "app_path": str(app_path),
+        "workspace_root": str(_ROOT),
+        "index_fingerprint": index_fp,
+        "build": f"{app_path.stat().st_mtime_ns}:{index_fp[:8]}",
+    }
+
+
 @st.cache_resource
 def _get_app(index_fingerprint: str, finetuned: bool):
     # Recreate retrieval resources whenever the persisted index fingerprint
@@ -65,6 +76,8 @@ def _get_app(index_fingerprint: str, finetuned: bool):
 def main() -> None:
     st.set_page_config(page_title="Medical RAG Agent", layout="wide")
     st.title("Medical RAG Agent")
+    runtime = _runtime_info()
+    st.caption(f"Build: `{runtime['build']}`")
 
     query = st.text_input("Query")
     run = st.button("Run")
@@ -118,6 +131,7 @@ def main() -> None:
         with st.sidebar.expander("Debug"):
             st.write(
                 {
+                    **runtime,
                     "query_mode": classify_query_mode(query),
                     "abstained": is_withheld,
                     "retrieved_doc_count": len(retrieved_docs),

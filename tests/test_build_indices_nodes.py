@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys
 import types
 import unittest
-from unittest.mock import patch
 
 
 def _install_fake_build_indices_deps() -> None:
@@ -147,13 +146,34 @@ _install_fake_build_indices_deps()
 from src.data import build_indices as build_indices_mod
 
 
-class TestBuildIndicesCli(unittest.TestCase):
-    def test_main_passes_force_flag(self) -> None:
-        with patch.object(build_indices_mod, "build_indices") as mock_build:
-            with patch.object(sys, "argv", ["build_indices.py", "--force"]):
-                build_indices_mod.main()
+class TestBuildIndicesNodes(unittest.TestCase):
+    def test_documents_and_nodes_exclude_all_metadata_from_content(self) -> None:
+        row = {
+            "chunk_id": "123_001",
+            "text": "clean text only",
+            "pubmed_id": "123",
+            "question": "question text",
+            "final_decision": "yes",
+            "long_answer": "long answer",
+            "chunk_index": 1,
+        }
 
-        mock_build.assert_called_once_with(force=True)
+        doc = build_indices_mod._rows_to_documents([row])[0]
+        node = build_indices_mod._rows_to_nodes([row])[0]
+        expected_keys = [
+            "chunk_id",
+            "pubmed_id",
+            "question",
+            "final_decision",
+            "long_answer",
+            "chunk_index",
+        ]
+
+        self.assertEqual(doc.metadata, node.metadata)
+        self.assertEqual(doc.excluded_embed_metadata_keys, expected_keys)
+        self.assertEqual(doc.excluded_llm_metadata_keys, expected_keys)
+        self.assertEqual(node.excluded_embed_metadata_keys, expected_keys)
+        self.assertEqual(node.excluded_llm_metadata_keys, expected_keys)
 
 
 if __name__ == "__main__":

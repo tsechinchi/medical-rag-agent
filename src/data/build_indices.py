@@ -40,36 +40,46 @@ def _load_processed_rows() -> list[dict]:
         return [json.loads(line) for line in handle if line.strip()]
 
 
+def _row_metadata(row: dict) -> dict:
+    return {
+        "chunk_id": row["chunk_id"],
+        "pubmed_id": row.get("pubmed_id"),
+        "question": row.get("question"),
+        "final_decision": row.get("final_decision"),
+        "long_answer": row.get("long_answer"),
+        "chunk_index": row.get("chunk_index"),
+    }
+
+
 def _rows_to_documents(rows: Iterable[dict]) -> list[Document]:
     docs: list[Document] = []
     for row in rows:
-        metadata = {
-            "chunk_id": row["chunk_id"],
-            "pubmed_id": row.get("pubmed_id"),
-            "question": row.get("question"),
-            "final_decision": row.get("final_decision"),
-            "long_answer": row.get("long_answer"),
-            "chunk_index": row.get("chunk_index"),
-        }
-        docs.append(Document(text=row["text"], doc_id=row["chunk_id"], metadata=metadata))
+        metadata = _row_metadata(row)
+        metadata_keys = list(metadata.keys())
+        docs.append(
+            Document(
+                text=row["text"],
+                doc_id=row["chunk_id"],
+                metadata=metadata,
+                excluded_embed_metadata_keys=metadata_keys,
+                excluded_llm_metadata_keys=metadata_keys,
+            )
+        )
     return docs
 
 
 def _rows_to_nodes(rows: Iterable[dict]) -> list[TextNode]:
     nodes: list[TextNode] = []
     for row in rows:
+        metadata = _row_metadata(row)
+        metadata_keys = list(metadata.keys())
         nodes.append(
             TextNode(
                 text=row["text"],
                 id_=row["chunk_id"],
-                metadata={
-                    "chunk_id": row["chunk_id"],
-                    "pubmed_id": row.get("pubmed_id"),
-                    "question": row.get("question"),
-                    "final_decision": row.get("final_decision"),
-                    "long_answer": row.get("long_answer"),
-                    "chunk_index": row.get("chunk_index"),
-                },
+                metadata=metadata,
+                excluded_embed_metadata_keys=metadata_keys,
+                excluded_llm_metadata_keys=metadata_keys,
             )
         )
     return nodes
