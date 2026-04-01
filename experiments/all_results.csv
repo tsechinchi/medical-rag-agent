@@ -1,6 +1,6 @@
 variant,n_questions,faithfulness,faithfulness_nli,faithfulness_ragas,answer_relevancy,context_precision,context_recall,bertscore_f1_mean,bertscore_f1_all_mean,bertscore_f1_abstention_mean,avg_retries,latency_per_query_s,abstention_precision,unsupported_claims_rate,corrupted_output_rate
-full_pipeline,200,0.7513,0.7513,0.8715,0.8948,0.8324,0.8173,0.5557,0.5438,0.4153,0.14,10.3558,1.0,0.16,0.0
-ablation_no_loop,200,,,,,,,0.557,0.557,,,,,,
-ablation_dense_only,200,,,,,,,0.5565,0.5565,,,,,,
-ablation_no_rerank,200,,,,,,,0.5558,0.5558,,,,,,
-finetuned_pipeline,200,0.7513,0.7513,0.8715,0.8948,0.8324,0.8173,0.5557,0.5438,0.4153,0.14,10.3558,1.0,0.16,0.0
+full_pipeline,200,0.8369,0.8369,0.8545,0.8841,0.7286,0.7062,0.5596,0.5448,0.4036,0.08,9.8508,1.0,0.065,0.0
+ablation_no_loop,200,,,,,,,0.5544,0.5544,,,,,,
+ablation_dense_only,200,,,,,,,0.5506,0.5506,,,,,,
+ablation_no_rerank,200,,,,,,,0.5494,0.5494,,,,,,
+finetuned_pipeline,200,0.8369,0.8369,0.8545,0.8841,0.7286,0.7062,0.5596,0.5448,0.4036,0.08,9.8508,1.0,0.065,0.0
