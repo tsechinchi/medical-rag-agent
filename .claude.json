@@ -5,8 +5,8 @@
   "userID": "90d6fc6dbaf23f29b5bbc0dd97a18d175ed4f4d06a6f8ff86af174d9145dfbbb",
   "toolUsage": {
     "Read": {
-      "usageCount": 70,
-      "lastUsedAt": 1773651470116
+      "usageCount": 75,
+      "lastUsedAt": 1773653077792
     },
     "EnterPlanMode": {
       "usageCount": 1,
@@ -17,8 +17,8 @@
       "lastUsedAt": 1773650196891
     },
     "Bash": {
-      "usageCount": 31,
-      "lastUsedAt": 1773651479210
+      "usageCount": 52,
+      "lastUsedAt": 1773652651210
     },
     "Grep": {
       "usageCount": 2,
@@ -37,8 +37,8 @@
       "lastUsedAt": 1773650569350
     },
     "Edit": {
-      "usageCount": 20,
-      "lastUsedAt": 1773651464529
+      "usageCount": 21,
+      "lastUsedAt": 1773652595087
     },
     "ExitPlanMode": {
       "usageCount": 1,
@@ -47,6 +47,10 @@
     "TodoWrite": {
       "usageCount": 3,
       "lastUsedAt": 1773651082052
+    },
+    "TaskOutput": {
+      "usageCount": 2,
+      "lastUsedAt": 1773652573487
     }
   }
 }

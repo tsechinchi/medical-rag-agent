@@ -2,3 +2,11 @@
 2026-03-16T08:33:53.947Z [DEBUG] [Query.streamInput] Processing message 1: user
 2026-03-16T08:36:14.229Z [DEBUG] [Query.streamInput] Processing message 2: user
 2026-03-16T08:55:47.759Z [DEBUG] [Query.streamInput] Processing message 3: user
+2026-03-16T09:02:55.860Z [DEBUG] [Query.streamInput] Processing message 4: user
+2026-03-16T09:06:59.050Z [DEBUG] [Query.streamInput] Starting to process input stream
+2026-03-16T09:07:03.406Z [DEBUG] [Query.streamInput] Processing message 1: user
+2026-03-16T09:09:33.305Z [DEBUG] [Query.streamInput] Processing message 2: user
+2026-03-16T09:11:03.579Z [DEBUG] [Query.streamInput] Processing message 3: user
+2026-03-16T09:11:33.303Z [DEBUG] [Query.streamInput] Starting to process input stream
+2026-03-16T09:11:37.578Z [DEBUG] [Query.streamInput] Processing message 1: user
+2026-03-16T09:23:58.500Z [DEBUG] [Query.streamInput] Processing message 2: user
