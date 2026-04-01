@@ -73,20 +73,23 @@ def main() -> None:
             st.warning(result.get("disclaimer", "Medical disclaimer: This output is informational only and must not be used as a substitute for licensed clinical judgment.").strip())
 
         st.markdown(final_answer)
-        if citations:
+        if citations and not is_withheld:
             rendered = " ".join(f"[{citation}]" for citation in citations)
             st.caption(f"Citations: {rendered}")
         else:
             st.caption("No grounded citations available for this answer.")
 
         with st.expander("Sources"):
-            if not retrieved_docs:
+            if is_withheld:
+                st.info("Sources are hidden for abstentions because the system did not return a grounded answer.")
+            elif not retrieved_docs:
                 st.info("No sources were retrieved for this query.")
-            for idx, node in enumerate(retrieved_docs, start=1):
-                meta = node.metadata
-                st.markdown(f"**[{idx}] {meta.get('chunk_id', getattr(node, 'node_id', 'chunk'))}**")
-                st.write(node.get_content())
-                st.caption(f"PubMed: {meta.get('pubmed_id', 'n/a')} | Decision: {meta.get('final_decision', 'n/a')}")
+            else:
+                for idx, node in enumerate(retrieved_docs, start=1):
+                    meta = node.metadata
+                    st.markdown(f"**[{idx}] {meta.get('chunk_id', getattr(node, 'node_id', 'chunk'))}**")
+                    st.write(node.get_content())
+                    st.caption(f"PubMed: {meta.get('pubmed_id', 'n/a')} | Decision: {meta.get('final_decision', 'n/a')}")
 
         st.sidebar.metric("Faithfulness", f"{result.get('faithfulness_score', 0.0):.3f}")
         st.sidebar.metric("Retries", int(result.get("retry_count", 0)))
