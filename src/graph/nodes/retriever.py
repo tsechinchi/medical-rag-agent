@@ -96,16 +96,29 @@ def _overlap_ratio(query_terms: set[str], candidate_terms: set[str]) -> float:
     return len(query_terms & candidate_terms) / max(1, len(query_terms))
 
 
+def _shared_term_count(query_terms: set[str], candidate_terms: set[str]) -> int:
+    if not query_terms or not candidate_terms:
+        return 0
+    return len(query_terms & candidate_terms)
+
+
 def _is_domain_relevant(node: NodeWithScore, query_terms: set[str], min_overlap: float) -> bool:
     metadata = getattr(node, "metadata", {}) or {}
     meta_question = str(metadata.get("question") or "")
     content = node.get_content() if hasattr(node, "get_content") else ""
     content = str(content or "")
 
-    question_overlap = _overlap_ratio(query_terms, _keywords(meta_question))
-    content_overlap = _overlap_ratio(query_terms, _keywords(content))
+    question_terms = _keywords(meta_question)
+    content_terms = _keywords(content)
+    question_overlap = _overlap_ratio(query_terms, question_terms)
+    content_overlap = _overlap_ratio(query_terms, content_terms)
+    best_shared_terms = max(
+        _shared_term_count(query_terms, question_terms),
+        _shared_term_count(query_terms, content_terms),
+    )
     best_overlap = max(question_overlap, content_overlap)
-    return best_overlap >= min_overlap
+    min_shared_terms = int(getattr(app_config, "DOMAIN_RELEVANCE_MIN_SHARED_TERMS", 1))
+    return best_overlap >= min_overlap and best_shared_terms >= max(1, min_shared_terms)
 
 
 def retriever(state: AgentState) -> AgentState:

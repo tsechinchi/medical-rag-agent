@@ -79,6 +79,10 @@ ENABLE_DOMAIN_RELEVANCE_GATE = True
 
 # Minimum overlap ratio between query keywords and candidate text/metadata.
 DOMAIN_RELEVANCE_MIN_OVERLAP = 0.08
+# Require at least this many shared query keywords before a chunk is treated
+# as on-topic. This helps reject generic treatment overlaps such as a single
+# shared term like "radiotherapy" for an otherwise unrelated condition.
+DOMAIN_RELEVANCE_MIN_SHARED_TERMS = 2
 
 CHUNK_SIZE = 256
 CHUNK_OVERLAP = 32
