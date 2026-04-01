@@ -47,8 +47,16 @@ def _resolve_source_path() -> Path:
 
 def _extract_abstract(record: dict) -> str:
     contexts = record.get("context") or record.get("context_docs") or []
+
+    if isinstance(contexts, dict):
+        nested_contexts = contexts.get("contexts") or []
+        if isinstance(nested_contexts, list):
+            return clean_html(" ".join(str(item) for item in nested_contexts))
+        return clean_html(str(nested_contexts))
+
     if isinstance(contexts, list):
         return clean_html(" ".join(str(item) for item in contexts))
+
     return clean_html(str(contexts))
 
 

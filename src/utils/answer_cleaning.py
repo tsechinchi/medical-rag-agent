@@ -5,6 +5,14 @@ import re
 
 INSUFFICIENT_EVIDENCE = "The available evidence does not directly address this question."
 INSUFFICIENT_DOSING = "The available evidence does not directly address the exact dosing schedule."
+_ABSTENTION_PREFIXES = (
+    INSUFFICIENT_EVIDENCE.lower(),
+    INSUFFICIENT_DOSING.lower(),
+    "the context does not directly address this question.",
+    "the context does not directly address the exact dosing schedule.",
+    "the evidence does not directly address this question.",
+    "the evidence does not directly address the exact dosing schedule.",
+)
 
 _INLINE_CITATION_RE = re.compile(r"\[(\d+)\]")
 _PARTIAL_PREFIX_RE = re.compile(
@@ -27,9 +35,7 @@ _DICTISH_RE = re.compile(r"\{\s*'[^']+'\s*:\s*", re.IGNORECASE)
 
 def is_abstention(text: str) -> bool:
     lowered = (text or "").strip().lower()
-    return lowered.startswith(INSUFFICIENT_EVIDENCE.lower()) or lowered.startswith(
-        INSUFFICIENT_DOSING.lower()
-    )
+    return any(lowered.startswith(prefix) for prefix in _ABSTENTION_PREFIXES)
 
 
 def is_corrupted_output(text: str) -> bool:

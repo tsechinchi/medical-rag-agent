@@ -14,6 +14,8 @@ from config import config as app_config
 from src.graph.graph import compile_graph
 from src.model.llm_wrapper import QuantizedHFLLM, register_llm
 from src.model.loader import load_model_and_tokenizer
+from src.model.prompts import classify_query_mode
+from src.utils.answer_cleaning import is_abstention
 
 
 def _build_and_register_llm(*, finetuned: bool = True) -> QuantizedHFLLM:
@@ -54,12 +56,23 @@ def main() -> None:
             result = _get_app().invoke({"query": query, "retry_count": 0})
         retrieved_docs = result.get("retrieved_docs", [])
         citations = result.get("citations", [])
+        final_answer = str(result.get("final_answer", "No answer generated.") or "")
+        is_withheld = is_abstention(final_answer)
+
+        if not retrieved_docs:
+            abstention_reason = "No grounded documents were retrieved."
+        elif is_withheld:
+            abstention_reason = "The model returned an abstention despite having retrieved context."
+        elif float(result.get("faithfulness_score", 0.0) or 0.0) < float(getattr(app_config, "FAITHFULNESS_THRESHOLD", 0.4)):
+            abstention_reason = "The critic judged the answer weakly supported."
+        else:
+            abstention_reason = "The pipeline did not abstain."
 
         # Disclaimer is shown once here; synthesizer no longer prepends it to final_answer.
         if result.get("safety_filter_triggered"):
             st.warning(result.get("disclaimer", "Medical disclaimer: This output is informational only and must not be used as a substitute for licensed clinical judgment.").strip())
 
-        st.markdown(result.get("final_answer", "No answer generated."))
+        st.markdown(final_answer)
         if citations:
             rendered = " ".join(f"[{citation}]" for citation in citations)
             st.caption(f"Citations: {rendered}")
@@ -77,6 +90,27 @@ def main() -> None:
 
         st.sidebar.metric("Faithfulness", f"{result.get('faithfulness_score', 0.0):.3f}")
         st.sidebar.metric("Retries", int(result.get("retry_count", 0)))
+
+        with st.sidebar.expander("Debug"):
+            st.write(
+                {
+                    "query_mode": classify_query_mode(query),
+                    "abstained": is_withheld,
+                    "retrieved_doc_count": len(retrieved_docs),
+                    "faithfulness_threshold": float(getattr(app_config, "FAITHFULNESS_THRESHOLD", 0.4)),
+                    "faithfulness_score": float(result.get("faithfulness_score", 0.0) or 0.0),
+                    "retry_count": int(result.get("retry_count", 0) or 0),
+                }
+            )
+            st.caption(abstention_reason)
+            critic_feedback = str(result.get("critic_feedback", "") or "").strip()
+            if critic_feedback:
+                st.markdown("**Critic feedback**")
+                st.code(critic_feedback)
+            draft_answer = str(result.get("draft_answer", "") or "").strip()
+            if draft_answer:
+                st.markdown("**Draft answer**")
+                st.code(draft_answer)
 
         for idx, node in enumerate(retrieved_docs, start=1):
             with st.sidebar.expander(f"Chunk {idx}"):
