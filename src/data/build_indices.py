@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import pickle
+import shutil
 import sys as _sys
 from pathlib import Path as _Path
 from typing import cast
@@ -98,6 +100,11 @@ def _embedding_dimension(embed_model: HuggingFaceEmbedding) -> int:
     return len(embed_model.get_text_embedding("dimension probe"))
 
 
+def _clear_persisted_indices() -> None:
+    if INDICES_DIR.exists():
+        shutil.rmtree(INDICES_DIR)
+
+
 def build_indices(force: bool = False) -> None:
     if not PROCESSED_PATH.exists():
         raise FileNotFoundError(f"Missing processed corpus: {PROCESSED_PATH}")
@@ -124,6 +131,10 @@ def build_indices(force: bool = False) -> None:
     if not force and corpus_is_current() and vector_ready:
         index = load_index()
     else:
+        # Persisting into an existing LlamaIndex directory can leave stale
+        # nodes/docstore entries behind, so a real rebuild starts from a clean
+        # directory whenever the corpus changed or the caller forces a rebuild.
+        _clear_persisted_indices()
         rows = _load_processed_rows()
         documents = _rows_to_documents(rows)
         vector_store = FaissVectorStore(faiss_index=faiss.IndexFlatL2(_embedding_dimension(embed_model)))
@@ -167,7 +178,14 @@ def load_bm25_retriever() -> BM25Retriever:
 
 
 def main() -> None:
-    build_indices()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Delete persisted index artifacts and rebuild from the processed corpus.",
+    )
+    args = parser.parse_args()
+    build_indices(force=args.force)
 
 
 if __name__ == "__main__":

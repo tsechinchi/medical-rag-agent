@@ -12,6 +12,7 @@ if str(_ROOT) not in sys.path:
 
 from config import config as app_config
 from src.graph.graph import compile_graph
+from src.graph.nodes.retriever import clear_retriever_cache
 from src.model.llm_wrapper import QuantizedHFLLM, register_llm
 from src.model.loader import load_model_and_tokenizer
 from src.model.prompts import classify_query_mode
@@ -37,10 +38,27 @@ def _build_and_register_llm(*, finetuned: bool = True) -> QuantizedHFLLM:
     return llm
 
 
+def _index_fingerprint() -> str:
+    md5_path = _ROOT / "data" / "indices" / "corpus.md5"
+    if md5_path.exists():
+        return md5_path.read_text(encoding="utf-8").strip()
+
+    processed_path = _ROOT / "data" / "processed" / "pubmed_qa_train.jsonl"
+    if processed_path.exists():
+        stat = processed_path.stat()
+        return f"{int(stat.st_mtime)}:{stat.st_size}"
+
+    return "missing-index"
+
+
 @st.cache_resource
-def _get_app():
+def _get_app(index_fingerprint: str, finetuned: bool):
+    # Recreate retrieval resources whenever the persisted index fingerprint
+    # changes so the app cannot keep serving stale in-memory chunks after a
+    # manual rebuild on the same instance.
+    clear_retriever_cache()
     # Build and register local LLM so LlamaIndex does not default to OpenAI.
-    _build_and_register_llm(finetuned=getattr(app_config, "USE_FINETUNED", True))
+    _build_and_register_llm(finetuned=finetuned)
     return compile_graph()
 
 
@@ -53,7 +71,10 @@ def main() -> None:
 
     if run and query:
         with st.spinner("Running retrieval and generation..."):
-            result = _get_app().invoke({"query": query, "retry_count": 0})
+            result = _get_app(
+                _index_fingerprint(),
+                bool(getattr(app_config, "USE_FINETUNED", True)),
+            ).invoke({"query": query, "retry_count": 0})
         retrieved_docs = result.get("retrieved_docs", [])
         citations = result.get("citations", [])
         final_answer = str(result.get("final_answer", "No answer generated.") or "")
