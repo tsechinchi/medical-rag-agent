@@ -2,110 +2,75 @@
 
 This folder stores outputs and logs produced by the evaluation pipeline.
 
-## Run from project root
+## Run From Project Root
 
-All commands below should be run from:
+All commands below should be run from the repository root:
 
 ```bash
-cd /teamspace/studios/this_studio
+cd medical-rag-agent
 ```
 
-    ## Quick sanity run (3 samples)
+## Common Commands
+
+Quick sanity run:
 
 ```bash
-python -m src.evaluation.run_eval --n_samples 3 --profile fast
+uv run python -m src.evaluation.run_eval --n_samples 3 --profile fast
 ```
 
-## Budgeted full evaluation (all test samples)
+Full T4-budgeted evaluation:
 
 ```bash
-python -m src.evaluation.run_eval --profile auto --budget-seconds 10800 --with-ragas-judge
+uv run python -m src.evaluation.run_eval --profile t4-safe --budget-seconds 10800 --with-ragas-judge
 ```
 
-`auto` selects the lightest profile that fits the request:
-
-- `fast`: model-free + BERTScore only, judge disabled
-- `t4-tight`: judge enabled with the leanest T4 settings
-- `t4-safe`: judge enabled with the default 3-hour budget
-
-## GPU-forced run (recommended)
+Finetuned comparison only:
 
 ```bash
-env BERTSCORE_DEVICE=cuda CRITIC_DEVICE=cuda CUDA_VISIBLE_DEVICES=0 \
-python -m src.evaluation.run_eval --profile auto --budget-seconds 10800 --with-ragas-judge
+uv run python -m src.evaluation.ablations --only D --profile t4-tight --budget-seconds 10800 --with-ragas-judge
 ```
 
-The structured judge is now single-pass and budget-aware, so it is safe to include in the default 3-hour T4 workflow.
-
-## Recommended presets
-
-Stable preset (best for long runs):
+Refresh merged summary and figures:
 
 ```bash
-export CUDA_VISIBLE_DEVICES=0
-export BERTSCORE_DEVICE=cuda
-export CRITIC_DEVICE=cuda
+uv run python -m src.evaluation.plot_results
 ```
 
-Aggressive preset (higher throughput, more OOM/timeout risk):
+## Runtime Profiles
+
+- `fast`: model-free evaluation plus BERTScore, judge disabled
+- `t4-tight`: judge enabled with the leanest single-T4 settings
+- `t4-safe`: judge enabled with the default 3-hour T4 budget
+- `auto`: chooses `fast` when judge mode is off, otherwise chooses between `t4-tight` and `t4-safe` from the budget
+
+## Useful Variants
+
+Run only model-free evaluation:
 
 ```bash
-export CUDA_VISIBLE_DEVICES=0
-export BERTSCORE_DEVICE=cuda
-export CRITIC_DEVICE=cuda
+uv run python -m src.evaluation.run_eval --n_samples 10 --profile fast --skip-bertscore
 ```
 
-Example with stable preset + judge mode:
+Run only BERTScore:
 
 ```bash
-nohup env CUDA_VISIBLE_DEVICES=0 BERTSCORE_DEVICE=cuda CRITIC_DEVICE=cuda \
-python -m src.evaluation.run_eval --n_samples 200 --profile auto --budget-seconds 10800 --with-ragas-judge > experiments/run_eval_full.log 2>&1 &
-echo $! > experiments/run_eval_full.pid
-```
-
-Example with aggressive preset + judge mode:
-
-```bash
-nohup env CUDA_VISIBLE_DEVICES=0 BERTSCORE_DEVICE=cuda CRITIC_DEVICE=cuda \
-python -m src.evaluation.run_eval --n_samples 3 --profile t4-tight --with-ragas-judge > experiments/run_eval_full.log 2>&1 &
-echo $! > experiments/run_eval_full.pid
-```
-
-## Useful variants
-
-Run only model-free (skip BERTScore):
-
-```bash
-python -m src.evaluation.run_eval --n_samples 3 --profile fast --skip-bertscore
-```
-
-Run only BERTScore (skip model-free):
-
-```bash
-python -m src.evaluation.run_eval --n_samples 10 --profile fast --skip-model-free
+uv run python -m src.evaluation.run_eval --n_samples 10 --profile fast --skip-model-free
 ```
 
 Set a fixed seed:
 
 ```bash
-python -m src.evaluation.run_eval --n_samples 10 --profile fast --seed 42
+uv run python -m src.evaluation.run_eval --n_samples 10 --profile fast --seed 42
 ```
 
-## Background run with log file
+## Background Runs
 
-Fast mode (recommended for runtime stability):
-
-```bash
-nohup env BERTSCORE_DEVICE=cuda CRITIC_DEVICE=cuda CUDA_VISIBLE_DEVICES=0 \
-python -m src.evaluation.run_eval --n_samples 3 --profile fast > experiments/run_eval_full.log 2>&1 &
-echo $! > experiments/run_eval_full.pid
-```
-
-With RAGAS LLM-judge enabled (slower):
+These examples assume a Unix-like shell. On Windows, run the same `uv run ...` commands directly without `nohup`.
 
 ```bash
-nohup env BERTSCORE_DEVICE=cuda CRITIC_DEVICE=cuda CUDA_VISIBLE_DEVICES=0 \
-python -m src.evaluation.run_eval --n_samples 3 --profile auto --budget-seconds 10800 --with-ragas-judge > experiments/run_eval_full.log 2>&1 &
+nohup env CUDA_VISIBLE_DEVICES=0 BERTSCORE_DEVICE=cuda CRITIC_DEVICE=cuda \
+uv run python -m src.evaluation.run_eval --profile t4-safe --budget-seconds 10800 --with-ragas-judge \
+> experiments/run_eval_full.log 2>&1 &
 echo $! > experiments/run_eval_full.pid
 ```
 
@@ -121,62 +86,63 @@ Tail log:
 tail -f experiments/run_eval_full.log
 ```
 
-## Output files
+## Output Files
 
 Primary outputs:
 
-- `experiments/model_free_eval_results.csv` - Per-query detailed metrics including safety indicators
-- `experiments/bertscore_results.csv` - BERTScore F1 semantic similarity scores
-- `experiments/ragas_results.csv` - Legacy alias for the model-free/structured-judge metrics
-- `experiments/all_results.csv` - Merged summary by variant with aggregated metrics
-- `docs/figures/*.png` - Plots generated by `python -m src.evaluation.plot_results`
+- `experiments/model_free_eval_results.csv`: per-question graph, critic, and judge-aligned metrics
+- `experiments/bertscore_results.csv`: per-question BERTScore results
+- `experiments/ragas_results.csv`: legacy alias for `model_free_eval_results.csv`
+- `experiments/ablation_*.csv`: ablation-specific per-question outputs
+- `experiments/all_results.csv`: merged summary by variant
+- `docs/figures/*.png`: figures generated by `python -m src.evaluation.plot_results`
 
-Common logs:
+Note: `python -m src.evaluation.plot_results` refreshes `experiments/all_results.csv` before writing figures, so the plots and merged summary stay aligned.
 
-- `experiments/run_eval_3sample_ragas.log`
-- `experiments/run_eval_all_full.log`
-- `experiments/run_eval_all_monitor.log`
+## Per-Question Columns
 
-## New Safety Metrics (v2.0+)
+Common columns in `model_free_eval_results.csv`:
 
-The evaluation system now tracks additional **safety metrics** to measure abstention precision and hallucination risk:
+| Column | Description |
+|--------|-------------|
+| `question` | Evaluation question |
+| `answer` | Cleaned answer used for scoring |
+| `raw_answer` | Raw generation before cleaning |
+| `ground_truth` | Reference answer |
+| `retrieved_contexts_json` | Retrieved contexts used for scoring |
+| `faithfulness` / `faithfulness_nli` | Critic-derived faithfulness score |
+| `faithfulness_ragas` | Structured-judge faithfulness score when judge mode is enabled |
+| `answer_relevancy` | Structured-judge answer relevance score |
+| `context_precision` | Structured-judge context precision |
+| `context_recall` | Structured-judge context recall |
+| `latency_per_query_s` | End-to-end latency |
+| `avg_retries` | Retry count copied into the row for summary aggregation |
+| `abstention_detected` | `1` when the answer abstains due to insufficient evidence |
+| `unsupported_claims_count` | Number of critic-rejected claims |
+| `citation_count` | Number of inline citations such as `[1]` |
+| `retry_count` | Retry attempts used for the question |
+| `evidence_score` | Top retrieved document score |
+| `corrupted_output_detected` | `1` for malformed or corrupted generations |
+| `judge_raw_output` | Raw structured-judge output when judge mode is enabled |
+| `judge_used_fallback` | Whether the judge parser had to fall back to defaults |
 
-### Per-Query Columns (in model_free_eval_results.csv)
+## Summary Columns
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `abstention_detected` | Binary (0/1) | 1 if system withheld answer due to insufficient evidence |
-| `unsupported_claims_count` | Integer | Number of sentences rejected as unsupported by NLI critic |
-| `citation_count` | Integer | Number of inline [N] citations in answer |
-| `retry_count` | Integer | How many retry attempts were needed (max 3) |
-| `confidence_level` | Float (0.0-1.0) | System's confidence in the answer |
-| `evidence_score` | Float | Bge rerank score of top retrieved document |
+Common columns in `all_results.csv`:
 
-### Summary Metrics (in all_results.csv)
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `abstention_precision` | Float (0.0-1.0) | Fraction of abstentions that were appropriate (NLI=1.0) |
-| `unsupported_claims_rate` | Float | Fraction of queries with at least one unsupported claim |
-
-**Interpretation:**
-- **abstention_precision ≥ 0.95**: System's abstention decisions are highly accurate
-- **unsupported_claims_rate ≈ 0.0**: System has low hallucination risk
-- **Missing values**: Answer-quality metrics are masked for abstention rows so correct withholding does not drag down the score
-
-## Confidence Levels in Answers
-
-When confidence tracking is enabled, final answers include a confidence label:
-
-```
-[Evidence Confidence: Strongly Supported by Evidence]
-[Evidence Confidence: Well-Supported by Evidence]
-[Evidence Confidence: Partially Supported; Context Limitations Noted]
-[Evidence Confidence: Weakly Supported; Treat as Provisional]
-```
-
-These reflect internal NLI faithfulness scores:
-- ≥90%: Strongly Supported
-- 70-90%: Well-Supported
-- 50-70%: Partially Supported
-- <50%: Weakly Supported
+| Column | Description |
+|--------|-------------|
+| `variant` | Variant name such as `full_pipeline` or `finetuned_pipeline` |
+| `n_questions` | Number of evaluated rows |
+| `faithfulness_nli` | Mean critic faithfulness |
+| `faithfulness_ragas` | Mean structured-judge faithfulness |
+| `answer_relevancy` | Mean structured-judge answer relevance |
+| `context_precision` | Mean structured-judge context precision |
+| `context_recall` | Mean structured-judge context recall |
+| `bertscore_f1_mean` | Mean BERTScore over non-abstentions |
+| `bertscore_f1_all_mean` | Mean BERTScore over all rows |
+| `avg_retries` | Mean retries per row |
+| `latency_per_query_s` | Mean latency |
+| `abstention_precision` | Precision of abstention decisions |
+| `unsupported_claims_rate` | Fraction of rows with unsupported claims |
+| `corrupted_output_rate` | Fraction of corrupted outputs |

@@ -1,58 +1,30 @@
----
-base_model: BioMistral/BioMistral-7B
-library_name: transformers
-model_name: qlora_checkpoints
-tags:
-- generated_from_trainer
-- trl
-- sft
-licence: license
----
+# QLoRA Checkpoints
 
-# Model Card for qlora_checkpoints
+This directory stores local PEFT adapter artifacts produced by:
 
-This model is a fine-tuned version of [BioMistral/BioMistral-7B](https://huggingface.co/BioMistral/BioMistral-7B).
-It has been trained using [TRL](https://github.com/huggingface/trl).
+```bash
+uv run python -m src.finetune.qlora_train
+```
 
-## Quick start
+Contents:
+
+- `checkpoint-*`: intermediate trainer checkpoints saved during training
+- `final/`: the adapter directory the repo uses by default via `FINETUNED_ADAPTER_PATH`
+
+These files are local training artifacts, not published standalone models. They must be loaded together with the base model `BioMistral/BioMistral-7B`.
+
+Typical usage:
 
 ```python
-from transformers import pipeline
+from peft import PeftModel
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-question = "If you had a time machine, but could only go to the past or the future once and never return, which would you choose and why?"
-generator = pipeline("text-generation", model="None", device="cuda")
-output = generator([{"role": "user", "content": question}], max_new_tokens=128, return_full_text=False)[0]
-print(output["generated_text"])
+base_model_id = "BioMistral/BioMistral-7B"
+adapter_path = "data/qlora_checkpoints/final"
+
+tokenizer = AutoTokenizer.from_pretrained(base_model_id, trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained(base_model_id, trust_remote_code=True)
+model = PeftModel.from_pretrained(model, adapter_path)
 ```
 
-## Training procedure
-
- 
-
-
-
-This model was trained with SFT.
-
-### Framework versions
-
-- TRL: 0.29.0
-- Transformers: 4.57.6
-- Pytorch: 2.10.0
-- Datasets: 4.5.0
-- Tokenizers: 0.22.2
-
-## Citations
-
-
-
-Cite TRL as:
-    
-```bibtex
-@software{vonwerra2020trl,
-  title   = {{TRL: Transformers Reinforcement Learning}},
-  author  = {von Werra, Leandro and Belkada, Younes and Tunstall, Lewis and Beeching, Edward and Thrush, Tristan and Lambert, Nathan and Huang, Shengyi and Rasul, Kashif and Gallouédec, Quentin},
-  license = {Apache-2.0},
-  url     = {https://github.com/huggingface/trl},
-  year    = {2020}
-}
-```
+If you only need the current adapter for inference or ablation D, `final/` is the directory that matters.
