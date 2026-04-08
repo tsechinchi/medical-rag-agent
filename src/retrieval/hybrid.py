@@ -15,7 +15,7 @@ def load_hybrid_retriever(
     index = build_indices_mod.load_index()
     vector_retriever = index.as_retriever(similarity_top_k=similarity_top_k)
     bm25_retriever = build_indices_mod.load_bm25_retriever()
-    bm25_retriever.similarity_top_k = getattr(app_config, "BM25_SIMILARITY_TOP_K", 3)
+    bm25_retriever.similarity_top_k = getattr(app_config, "BM25_SIMILARITY_TOP_K", 6)
     fusion_mode: Any = "reciprocal_rerank"
 
     return QueryFusionRetriever(

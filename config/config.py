@@ -61,7 +61,7 @@ RETRY_ON_UNSUPPORTED_CLAIMS = False
 # before reaching the generator.
 RERANK_MIN_SCORE = -999
 # Keep only reranked chunks close to the best score to reduce context noise.
-RERANK_SCORE_MARGIN = 1.0
+RERANK_SCORE_MARGIN = 2.0
 
 # Hard cap on context chunks passed to generation after rerank filtering.
 MAX_CONTEXT_DOCS = 2

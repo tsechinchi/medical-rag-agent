@@ -71,6 +71,7 @@ Inference defaults in [`config/config.py`](./config/config.py) are intentionally
 
 | Setting | Value | Purpose |
 |---------|-------|---------|
+<<<<<<< HEAD
 | `FAITHFULNESS_THRESHOLD` | `0.40` | Critic validation threshold for retry/abstain decisions |
 | `CRITIC_SENTENCE_SUPPORT_THRESHOLD` | `0.65` | Per-sentence NLI support floor |
 | `MAX_RETRIES` | `1` | Maximum retry loops after critic feedback |
@@ -81,6 +82,16 @@ Inference defaults in [`config/config.py`](./config/config.py) are intentionally
 | `INFERENCE_MODEL_ID` | `BioMistral/BioMistral-7B` | Default medical-domain base model |
 | `MODEL_CACHE_DIR` | `models/biomistral-7b` | Local snapshot cache used after first download |
 | `LOAD_IN_4BIT` | `True` | 4-bit NF4 quantization |
+=======
+| `FAITHFULNESS_THRESHOLD` | 0.40 | Critic validation threshold |
+| `CRITIC_SENTENCE_SUPPORT_THRESHOLD` | 0.65 | Per-sentence NLI floor |
+| `MAX_RETRIES` | 1 | Allows one retry after critic failure |
+| `LOW_EVIDENCE_SCORE_FLOOR` | disabled | Retrieval confidence gate |
+| `ANSWER_TIMEOUT_SECONDS` | 45 | Hard wall-clock timeout |
+| `INFERENCE_MODEL_ID` | BioMistral/BioMistral-7B | Medical domain LLM |
+| `MODEL_CACHE_DIR` | models/biomistral-7b | Local snapshot cache used after first download |
+| `LOAD_IN_4BIT` | True | 4-bit NF4 quantization |
+>>>>>>> 86fba21 (feat: update .gitignore and enhance README with configuration details; modify generator logic and improve prompt instructions)
 
 Single-GPU runtime presets:
 
@@ -125,16 +136,26 @@ That means the finetune path and the evaluation path come from the same source d
 The system prioritizes evidence-based answers over speculation through multiple validation layers.
 
 ### Evidence Gates
+<<<<<<< HEAD
 
 - Retrieval score floors can stop generation if evidence is too weak.
 - Query mode detection handles calculations, dosing schedules, and binary questions.
 - Dosing evidence checks require explicit titration schedules in retrieved evidence.
+=======
+- Retrieval score floor can stop generation if the top reranked document score is too low, but this gate is disabled by default via `LOW_EVIDENCE_SCORE_FLOOR = -999`.
+- Query mode detection classifies calculations, dosing schedules, binary questions, and default questions; only calculation and dosing have dedicated graph branches.
+- Dosing-style safety is enforced primarily through prompt instructions that tell the model to abstain when the retrieved context lacks an explicit schedule.
+>>>>>>> 86fba21 (feat: update .gitignore and enhance README with configuration details; modify generator logic and improve prompt instructions)
 
 ### NLI Faithfulness Validation
 
 - Sentence-level support checks whether each sentence is backed by retrieved context.
 - Entailment checking uses a cross-encoder NLI model to validate claims.
+<<<<<<< HEAD
 - Retry loops are enabled but intentionally capped for notebook-friendly runs.
+=======
+- The critic can trigger one retry by default before synthesis.
+>>>>>>> 86fba21 (feat: update .gitignore and enhance README with configuration details; modify generator logic and improve prompt instructions)
 
 ### Confidence Thresholds
 
@@ -161,12 +182,19 @@ Summary metrics:
 - `corrupted_output_rate`: Fraction of malformed or obviously corrupted generations.
 
 ### Traditional Metrics
+<<<<<<< HEAD
 
 - `faithfulness_nli`: NLI-based entailment score from the critic.
 - `faithfulness_ragas`: Structured-judge faithfulness score when judge mode is enabled.
 - `bertscore_f1`: Semantic similarity to the reference answer.
 - `answer_relevancy`: Structured-judge answer relevance score.
 - `context_precision` and `context_recall`: Retrieval quality metrics.
+=======
+- `faithfulness_nli`: NLI-based entailment.
+- `bertscore_f1`: Semantic similarity to reference.
+- `answer_relevancy`: Structured-judge score from the local evaluation pipeline.
+- `context_precision` and `context_recall`: Structured-judge retrieval quality scores, with a heuristic fallback when the judge model is unavailable or unparseable.
+>>>>>>> 86fba21 (feat: update .gitignore and enhance README with configuration details; modify generator logic and improve prompt instructions)
 - `latency_per_query_s`: End-to-end response time.
 
 ## Troubleshooting

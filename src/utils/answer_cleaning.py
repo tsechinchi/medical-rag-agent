@@ -34,8 +34,9 @@ _DICTISH_RE = re.compile(r"\{\s*'[^']+'\s*:\s*", re.IGNORECASE)
 
 
 def is_abstention(text: str) -> bool:
-    lowered = (text or "").strip().lower()
-    return any(lowered.startswith(prefix) for prefix in _ABSTENTION_PREFIXES)
+    cleaned = clean_for_scoring(text).strip().lower().rstrip(".")
+    normalized_prefixes = tuple(prefix.rstrip(".") for prefix in _ABSTENTION_PREFIXES)
+    return cleaned in normalized_prefixes
 
 
 def is_corrupted_output(text: str) -> bool:

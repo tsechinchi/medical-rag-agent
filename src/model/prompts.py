@@ -11,7 +11,7 @@ SYSTEM_PROMPT = (
     "If the context supports only part of the answer, answer only that supported part and explicitly say what the context does not establish. "
     "When the question asks for a mechanism, diagnosis, or definitive management, do not infer across similar conditions or drugs. "
     "Cite sources inline using their numeric reference number, e.g. [1] or [2]. "
-    "If the context does not contain enough information to answer the question, "
+    "If no provided passage supports any part of the answer, "
     "say exactly: 'The available evidence does not directly address this question.' "
     "Do NOT copy or repeat raw context text verbatim. "
     "Keep the response concise (1-3 sentences). "
@@ -20,6 +20,7 @@ SYSTEM_PROMPT = (
     "CRITICAL SAFETY ANCHOR: Every claim must be directly traceable to the provided context. "
     "If uncertain about supporting evidence, state the limitation explicitly: "
     "'The context suggests X, but does not clearly establish Y.' "
+    "Prefer a partial evidence-backed answer over a full abstention when at least one claim is directly supported. "
     "Abstention is better than speculation in medical contexts."
 )
 
@@ -74,7 +75,7 @@ def _mode_instructions(query: str, has_context: bool, is_partial: bool = False) 
                 f"{base_instruction}"
                 "If the context contains a titration schedule, escalation sequence, or day-by-day dosing table, reproduce every step in order. "
                 "Do not compress a multi-step schedule into a simplified summary. "
-                "If the exact schedule is not present in the context, say the available evidence does not directly address the exact dosing schedule. "
+                "If the exact schedule is not present in the context, state any directly supported dosing details first and then say what schedule details the context does not establish. "
             )
         return (
             f"{base_instruction}"
@@ -85,7 +86,8 @@ def _mode_instructions(query: str, has_context: bool, is_partial: bool = False) 
         return (
             f"{base_instruction}"
             "This is a yes/no question. Start the answer with 'Yes,' or 'No,' when the context clearly supports one side. "
-            "If the evidence is mixed or insufficient, say exactly: 'The available evidence does not directly address this question.' "
+            "If the evidence is mixed, answer with the supported nuance instead of forcing a hard yes or no. "
+            "Only use the exact abstention sentence when no provided passage supports either side. "
             "After the yes/no decision, give one concise evidence-backed sentence only. "
         )
     return base_instruction

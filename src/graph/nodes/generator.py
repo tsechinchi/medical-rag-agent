@@ -34,7 +34,7 @@ def generator(state: AgentState) -> AgentState:
         query=query,
         context_blocks=context_blocks,
         critic_feedback=critic_feedback,
-        is_partial=False,
+        is_partial=bool(critic_feedback.strip()),
     )
 
     llm = Settings.llm
